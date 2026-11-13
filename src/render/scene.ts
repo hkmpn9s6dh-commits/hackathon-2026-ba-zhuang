@@ -785,7 +785,7 @@ export class Scene {
         const ware = s.wares.find((w) => w.uid === uid);
         if (ware) {
           const idx = s.pieces.findIndex((p) => p.slot === i);
-          const shown = s.phase === 'open' && idx >= 0 && idx < s.revealed;
+          const shown = s.phase === 'open' && idx >= 0 && s.revealed.includes(idx);
           const piece = idx >= 0 ? s.pieces[idx] : null;
           drawWare(ctx, ware.def, r.x + r.w / 2, r.y + r.h * 0.9, fitWare(ware.def.id, r.w * 0.84, r.h * 0.62), {
             heat: glow * 0.5,
@@ -1158,11 +1158,43 @@ export class Scene {
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(243,239,228,0.3)';
+    ctx.fillStyle = 'rgba(243,239,228,0.34)';
     ctx.font = `${compact ? 10 : 11}px "Microsoft YaHei", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText('熟', c.x + 7, yOf(0.94) + 4);
     ctx.fillText('生', c.x + 7, yOf(0.08) + 4);
+
+    // Title and legend live in the empty top-right corner of the chart.
+    ctx.textAlign = 'right';
+    ctx.font = `${compact ? 11 : 13}px "Songti SC","SimSun",serif`;
+    ctx.fillStyle = 'rgba(243,239,228,0.55)';
+    ctx.fillText('火 路', x1 - 6, c.y + (compact ? 13 : 18));
+    if (!compact) {
+      ctx.font = '11px "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = 'rgba(243,239,228,0.32)';
+      ctx.fillText('虚线 该走的路', x1 - 6, c.y + 34);
+      ctx.fillStyle = 'rgba(255,196,107,0.55)';
+      ctx.fillText('实线 你的火', x1 - 6, c.y + 49);
+    }
+
+    // Shard marks: what the fire looked like each time you pulled a piece out.
+    for (const m of s.shardMarks) {
+      const mx = x0 + ((x1 - x0) * Math.min(m.t, total)) / total;
+      const col = m.verdict === 'ripe' ? 'rgba(158,196,184,0.9)' : m.verdict === 'burnt' ? 'rgba(184,69,47,0.95)' : 'rgba(210,200,180,0.7)';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(mx, y1 - 2);
+      ctx.lineTo(mx, y1 - 12);
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(mx, y1 - 13);
+      ctx.lineTo(mx - 3, y1 - 18);
+      ctx.lineTo(mx + 3, y1 - 18);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(243,239,228,0.22)';
     ['子', '卯', '午', '酉', '子'].forEach((t, i) => {

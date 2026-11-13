@@ -210,7 +210,14 @@ try {
   await wait(400);
   await shot('07-open');
 
-  // Reveal every piece.
+  // Pull one piece out by clicking it, then take the rest at once.
+  const takes = await page.locator('.take').count();
+  if (takes > 0) {
+    await page.locator('.take').first().click();
+    await wait(260);
+    const after = await state();
+    check('AC-16 clicking a piece pulls it out', after.revealed.length === 1, `revealed ${after.revealed.length}`);
+  }
   for (let i = 0; i < 10; i++) {
     s = await state();
     if (s.phase !== 'open') break;

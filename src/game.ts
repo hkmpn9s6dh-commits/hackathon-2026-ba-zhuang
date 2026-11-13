@@ -42,7 +42,10 @@ export interface GameState {
   samples: number[];
   peak: number;
   pieces: Piece[];
-  revealed: number;
+  /** Indices into pieces that have been taken out of the kiln. */
+  revealed: number[];
+  /** Where the fire stood each time a shard came out. */
+  shardMarks: { t: number; verdict: Shard['verdict'] }[];
   settlement: Settlement | null;
   coins: number;
   rep: number;
@@ -73,7 +76,8 @@ export class Game {
       samples: [],
       peak: 0,
       pieces: [],
-      revealed: 0,
+      revealed: [],
+      shardMarks: [],
       settlement: null,
       coins: 0,
       rep: 0,
@@ -112,7 +116,8 @@ export class Game {
     this.state.samples = [];
     this.state.peak = 0;
     this.state.pieces = [];
-    this.state.revealed = 0;
+    this.state.revealed = [];
+    this.state.shardMarks = [];
     this.state.settlement = null;
     this.state.shards = 3;
     this.state.shard = null;
@@ -190,6 +195,7 @@ export class Game {
           ? { temp: s.fire.temp, verdict: 'burnt', label: '釉已经流到足上，再烧就粘窑' }
           : { temp: s.fire.temp, verdict: 'ripe', label: '釉面流平，光从胎里透出来' };
     s.shard = shard;
+    s.shardMarks.push({ t: s.fire.t, verdict: shard.verdict });
     this.say(
       shard.verdict === 'raw' ? '火照子还生。' : shard.verdict === 'burnt' ? '火照子过了。' : '火照子正到。',
     );
@@ -198,6 +204,16 @@ export class Game {
 
   closeShard(): void {
     this.state.shard = null;
+  }
+
+  /** What the master says to do with what the shard just told you. */
+  shardAdvice(): string {
+    const marks = this.state.shardMarks;
+    const last = marks[marks.length - 1];
+    if (!last) return '';
+    if (last.verdict === 'raw') return '火照子还生——回去补柴，把火顶上去。';
+    if (last.verdict === 'burnt') return '火照子过了——立刻收火，别再添柴。';
+    return '火照子正到——稳住这个火色，等落窑。';
   }
 
   chooseEvent(index: 0 | 1): boolean {
@@ -252,21 +268,42 @@ export class Game {
     s.peak = readPeak(s.samples);
     const firing = { peak: s.peak, stress: s.fire.stress, shock: s.fire.shock, inBand: s.fire.inBand, duration: s.fire.t };
     s.pieces = evaluateKiln(s.wares, s.slots, firing, 20261201 + s.night, s.night === 2);
-    s.revealed = 0;
+    s.revealed = [];
     s.phase = 'open';
     s.fire.feeding = false;
     this.say('落窑。等火退。');
   }
 
+  /** Pull one specific piece out of the kiln. */
+  revealPiece(index: number): boolean {
+    const s = this.state;
+    if (s.phase !== 'open') return false;
+    if (index < 0 || index >= s.pieces.length || s.revealed.includes(index)) return false;
+    s.revealed.push(index);
+    const p = s.pieces[index];
+    this.say(`${p.ware.def.name}：${p.note}`);
+    if (s.revealed.length === s.pieces.length) this.toSettle();
+    return true;
+  }
+
   revealNext(): void {
     const s = this.state;
     if (s.phase !== 'open') return;
-    if (s.revealed < s.pieces.length) {
-      s.revealed += 1;
-      const p = s.pieces[s.revealed - 1];
-      this.say(`${p.ware.def.name}：${p.note}`);
+    const next = s.pieces.findIndex((_, i) => !s.revealed.includes(i));
+    if (next >= 0) {
+      this.revealPiece(next);
       return;
     }
+    this.toSettle();
+  }
+
+  /** Take everything out at once. */
+  revealAll(): void {
+    const s = this.state;
+    if (s.phase !== 'open') return;
+    s.pieces.forEach((_, i) => {
+      if (!s.revealed.includes(i)) s.revealed.push(i);
+    });
     this.toSettle();
   }
 
@@ -362,6 +399,11 @@ export class Game {
         const f = s.fire;
         if (s.event) return { text: '', target: null };
         if (s.shard) return { text: '', target: null };
+        const mark = s.shardMarks[s.shardMarks.length - 1];
+        if (mark && f.t - mark.t < 9) return { text: this.shardAdvice(), target: null };
+        if (s.night === 0 && f.t < 6) {
+          return { text: '那张火路图：虚线是这一窑该走的路，实线是你的火，压着它走。', target: 'feed' };
+        }
         if (f.t < 2.5) return { text: '按住「投柴」，火才起得来。', target: 'feed' };
         const off = f.temp - this.target;
         if (off < -0.07) return { text: '火头低了：投柴，或者把火眼开大一档。', target: 'feed' };
@@ -370,10 +412,10 @@ export class Game {
           return { text: '火候差不多了，拉一片火照子看看釉到没到。', target: 'shard' };
         }
         if (f.t > DURATION * 0.88) return { text: '快落窑了，稳住火路，别贪最后一把柴。', target: null };
-        return { text: '跟着左侧的火路走：低了加柴，高了收火。', target: null };
+        return { text: '跟着火路图走：低了加柴，高了收火。', target: null };
       }
       case 'open':
-        return { text: '点「出下一件」，看这一窑的成色。', target: 'next' };
+        return { text: '点窑里的一件器，把它取出来。', target: null };
       case 'settle':
         return { text: s.night >= 2 ? '点「看结局」。' : '点「下一夜」。', target: 'next' };
       default:

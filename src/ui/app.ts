@@ -490,9 +490,15 @@ export class App {
     this.bar.appendChild(feed);
 
     const vents = EL('div', 'vents');
-    vents.appendChild(EL('span', 'vlabel', '火眼'));
+    const vhead = EL('div', 'vhead');
+    vhead.appendChild(EL('span', 'vlabel', '火眼'));
+    vhead.appendChild(EL('span', 'vsub', '风门：开大升得快，收小更稳'));
+    vents.appendChild(vhead);
+    const vrow = EL('div', 'vrow');
+    const ventWords = ['闭', '微', '中', '大'];
     for (let i = 0; i < 4; i++) {
-      const b = EL('button', 'vent', String(i));
+      const b = EL('button', 'vent');
+      b.innerHTML = `<b>${i}</b><i>${ventWords[i]}</i>`;
       if (s.fire.vent === i) b.classList.add('on');
       b.addEventListener('click', () => {
         this.game.setVent(i);
@@ -500,13 +506,15 @@ export class App {
         this.signature = '';
         this.build();
       });
-      vents.appendChild(b);
+      vrow.appendChild(b);
     }
+    vents.appendChild(vrow);
     this.bar.appendChild(vents);
     this.bar.appendChild(EL('div', 'bar-spacer'));
 
-    const shardBtn = EL('button', 'shard-btn', `火照子 ×${s.shards}`);
+    const shardBtn = EL('button', 'shard-btn');
     shardBtn.id = 'shard';
+    shardBtn.innerHTML = `<b>火照子 ×${s.shards}</b><i>钩一片瓷看火候</i>`;
     shardBtn.disabled = s.shards <= 0;
     shardBtn.addEventListener('click', () => {
       this.pullShard();
@@ -532,16 +540,45 @@ export class App {
 
   private buildOpen(): void {
     const s = this.game.state;
-    const hint = EL('div', 'bar-hint');
-    hint.style.marginLeft = 'auto';
-    hint.textContent =
-      s.revealed < s.pieces.length ? `还剩 ${s.pieces.length - s.revealed} 件` : '窑门开了，清点。';
-    this.bar.appendChild(EL('div', 'bar-hint', '开窑。一件一件来。'));
+    const left = s.pieces.length - s.revealed.length;
+
+    // The pieces are in the kiln: click one to pull it out.
+    for (let i = 0; i < s.pieces.length; i++) {
+      if (s.revealed.includes(i)) continue;
+      const piece = s.pieces[i];
+      const r = slotRect(this.layout, piece.slot);
+      const el = EL('button', 'take');
+      el.dataset.piece = String(i);
+      el.style.left = `${r.x}px`;
+      el.style.top = `${r.y}px`;
+      el.style.width = `${r.w}px`;
+      el.style.height = `${r.h}px`;
+      el.appendChild(EL('span', 'take-label', '取'));
+      el.addEventListener('click', () => {
+        if (this.game.revealPiece(i)) {
+          sfx('clink');
+          this.signature = '';
+          this.build();
+        }
+      });
+      this.overlay.appendChild(el);
+    }
+
+    this.bar.appendChild(EL('div', 'bar-hint', left > 0 ? '窑门开了，热浪扑出来。' : '都出来了。'));
     this.bar.appendChild(EL('div', 'bar-spacer'));
-    this.bar.appendChild(hint);
-    const b = EL('button', 'btn btn-primary', s.revealed < s.pieces.length ? '出下一件' : '清点');
+    const count = EL('div', 'bar-hint');
+    count.textContent = `还剩 ${left} 件`;
+    this.bar.appendChild(count);
+    const b = EL('button', 'btn btn-primary', left > 0 ? '全部取出' : '清点');
     b.id = 'next';
-    b.addEventListener('click', () => this.advance());
+    b.addEventListener('click', () => {
+      if (left > 0) {
+        this.game.revealAll();
+        sfx('clink');
+      }
+      this.signature = '';
+      this.build();
+    });
     this.bar.appendChild(b);
   }
 
@@ -549,19 +586,45 @@ export class App {
     const s = this.game.state;
     const st = s.settlement;
     if (!st) return;
-    const panel = EL('div', 'panel');
-    panel.appendChild(EL('div', 'kicker', `第${['一', '二', '三'][s.night]}夜 · 结账`));
+    const panel = EL('div', 'panel panel-settle');
+    panel.appendChild(EL('div', 'kicker', `第${['一', '二', '三'][s.night]}夜 · 开窑`));
     panel.appendChild(EL('h2', '', `${this.game.nightDef.name}，这一窑`));
+
+    // The pieces themselves, not just a list.
+    const strip = EL('div', 'settle-strip');
+    for (const p of s.pieces) {
+      const cell = EL('div', `settle-chip v-${p.verdict}`);
+      const cv = EL('canvas');
+      cell.appendChild(cv);
+      cell.appendChild(EL('span', 'schip-name', p.ware.def.name));
+      cell.appendChild(EL('span', 'schip-verdict', VERDICT_LABEL[p.verdict]));
+      strip.appendChild(cell);
+      requestAnimationFrame(() =>
+        paintWareThumb(cv, p.ware.def, Math.min(2, window.devicePixelRatio || 1), {
+          over: p.verdict === 'over',
+          cracked: p.verdict === 'cracked',
+          flambe: p.verdict === 'flambe',
+        }),
+      );
+    }
+    panel.appendChild(strip);
+
+    const good = s.pieces.filter((p) => ['good', 'excellent', 'flambe'].includes(p.verdict)).length;
+    const best = s.pieces.reduce((a, b) => (a && a.quality >= b.quality ? a : b), s.pieces[0]);
+    const summary = EL('p', 'settle-summary');
+    summary.textContent = `成器 ${good}/${s.pieces.length}　最好的一件：${best?.ware.def.name ?? '—'}（${VERDICT_LABEL[best?.verdict ?? 'good']}）`;
+    panel.appendChild(summary);
+
     const grid = EL('div', 'result-grid');
     for (const p of s.pieces) {
       const row = EL('div', 'result-row');
       row.appendChild(EL('span', 'rname', p.ware.def.name));
-      const v = EL('span', `rverdict v-${p.verdict}`, VERDICT_LABEL[p.verdict]);
-      row.appendChild(v);
+      row.appendChild(EL('span', `rverdict v-${p.verdict}`, VERDICT_LABEL[p.verdict]));
       row.appendChild(EL('span', 'bar-hint', p.note));
       grid.appendChild(row);
     }
     panel.appendChild(grid);
+
     for (const o of st.orders) {
       const line = EL('p', '');
       line.style.fontSize = '13px';
@@ -569,6 +632,7 @@ export class App {
       line.textContent = `${o.done ? '✓' : '×'} ${o.order.label}（${o.have}/${o.order.count}）${o.done ? ` +${o.order.reward} 文` : ''}`;
       panel.appendChild(line);
     }
+
     const score = EL('div', 'score-line');
     const c1 = EL('div');
     c1.append(EL('span', '', '铜钱'), document.createTextNode(`${st.coins} 文`));
@@ -657,6 +721,9 @@ export class App {
     const p = EL('p', '');
     p.textContent = s.shard.label;
     right.appendChild(p);
+    const advice = EL('p', 'shard-advice');
+    advice.textContent = `→ ${this.game.shardAdvice().replace(/火照子[^—]*—/, '').replace(/^[—\s]+/, '')}`;
+    right.appendChild(advice);
     const row = EL('div', 'row');
     const close = EL('button', 'btn btn-primary', '放回去');
     close.addEventListener('click', () => {

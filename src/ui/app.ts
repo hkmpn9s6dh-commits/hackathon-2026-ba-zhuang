@@ -8,6 +8,7 @@ import { VERDICT_LABEL } from '../sim/score';
 import type { WareDef } from '../sim/types';
 import { computeLayout, paintWareThumb, Scene, slotRect, type Layout } from '../render/scene';
 import { drawWare as drawWarePublic, fitWare as fitWarePublic } from '../render/porcelain';
+import { clearRun, describe, hasRun, loadCodex, loadRun, saveCodex, saveRun, type RunSave } from '../save';
 import { drawShard } from '../render/porcelain';
 import { sfx, setFireLevel } from '../audio';
 
@@ -51,6 +52,9 @@ export class App {
   private hintText = '';
   private pulseEl: HTMLElement | null = null;
   private codexOpen = false;
+  private pending: RunSave | null = null;
+  private lastSave = 0;
+  private lastPhase = '';
 
   constructor() {
     this.canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -76,6 +80,14 @@ export class App {
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => this.resize());
     this.bindKeys();
+    this.game.seedCodex(loadCodex());
+    this.game.onCodex = (codex) => saveCodex(codex);
+    this.pending = hasRun() ? loadRun() : null;
+    this.persist(true);
+    window.addEventListener('pagehide', () => this.persist(true));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.persist(true);
+    });
     this.build();
     requestAnimationFrame((t) => this.frame(t));
   }
@@ -130,6 +142,7 @@ export class App {
     const g = this.game;
     const p = g.state.phase;
     if (p === 'title') {
+      clearRun();
       g.begin();
       sfx('door');
     } else if (p === 'brief') {
@@ -166,6 +179,7 @@ export class App {
     this.scene.draw(this.ctx, this.game, this.layout, now, dt);
     this.syncHud();
     this.syncHint();
+    this.persist(false);
     const sig = this.sig();
     if (sig !== this.signature) {
       this.signature = sig;
@@ -209,6 +223,31 @@ export class App {
   }
 
   /** One quiet line from the master, plus a breathing ring on the next control. */
+  /** Write the run every couple of seconds, and immediately when the phase changes. */
+  private persist(force: boolean): void {
+    const s = this.game.state;
+    const now = performance.now();
+    const phaseChanged = s.phase !== this.lastPhase;
+    if (!force && !phaseChanged && now - this.lastSave < 1800) return;
+    this.lastPhase = s.phase;
+    this.lastSave = now;
+    if (s.phase === 'title' || s.phase === 'end') {
+      if (s.phase === 'end') clearRun();
+      return;
+    }
+    if (this.codexOpen) return;
+    saveRun(s);
+    this.pending = null;
+    this.showSaved();
+  }
+
+  private showSaved(): void {
+    const el = document.getElementById('hud-saved');
+    if (!el) return;
+    el.classList.add('on');
+    window.setTimeout(() => el.classList.remove('on'), 1400);
+  }
+
   private syncHint(): void {
     const h = this.game.hint();
     if (h.text !== this.hintText) {
@@ -317,9 +356,36 @@ export class App {
     inner.appendChild(EL('p', 'tagline', '一窑火，十二个时辰，一片瓷告诉你火候'));
     inner.appendChild(EL('p', 'tagline-en', 'BA ZHUANG — THE KILN MASTER'));
     const acts = EL('div', 'title-actions');
-    const start = EL('button', 'btn btn-primary', '点火');
-    start.addEventListener('click', () => this.advance());
-    acts.appendChild(start);
+    if (this.pending) {
+      const cont = EL('button', 'btn btn-primary', '继续');
+      cont.id = 'continue';
+      cont.addEventListener('click', () => {
+        if (this.game.resume(this.pending as RunSave)) {
+          this.pending = null;
+          sfx('door');
+          this.signature = '';
+          this.build();
+        }
+      });
+      acts.appendChild(cont);
+      const fresh = EL('button', 'btn', '重新开一窑');
+      fresh.id = 'restart';
+      fresh.addEventListener('click', () => {
+        clearRun();
+        this.pending = null;
+        this.game.reset();
+        this.game.begin();
+        this.signature = '';
+        this.build();
+      });
+      acts.appendChild(fresh);
+      const note = EL('p', 'resume-note', `上次烧到：${describe(this.pending)}`);
+      inner.appendChild(note);
+    } else {
+      const start = EL('button', 'btn btn-primary', '点火');
+      start.addEventListener('click', () => this.advance());
+      acts.appendChild(start);
+    }
     const codex = EL('button', 'btn', '瓷谱');
     codex.addEventListener('click', () => {
       this.codexOpen = true;

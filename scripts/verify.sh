@@ -24,7 +24,7 @@ command -v npm >/dev/null 2>&1 && ok "npm available" || bad "npm available"
 
 if npx tsc --noEmit --pretty false >/tmp/bz-tsc.log 2>&1; then ok "typescript type check"; else bad "typescript type check"; tail -6 /tmp/bz-tsc.log; fi
 
-if npx vitest run --reporter=dot >/tmp/bz-unit.log 2>&1; then ok "simulation unit checks"; else bad "simulation unit checks"; tail -16 /tmp/bz-unit.log; fi
+if npx vitest run --pool=forks --poolOptions.forks.singleFork --reporter=dot >/tmp/bz-unit.log 2>&1; then ok "simulation + save unit checks (27)"; else bad "simulation unit checks"; tail -16 /tmp/bz-unit.log; fi
 
 if [ $FAST -eq 0 ]; then
   if npm run build >/tmp/bz-build.log 2>&1; then ok "production build"; else bad "production build"; tail -12 /tmp/bz-build.log; fi

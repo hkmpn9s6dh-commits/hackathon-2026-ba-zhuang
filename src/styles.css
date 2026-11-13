@@ -1212,3 +1212,27 @@ button:focus-visible,
     width: 120px;
   }
 }
+
+/* ── 存档 ───────────────────────────────────────────── */
+
+.hud-saved {
+  font-family: 'Songti SC', 'SimSun', serif;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--celadon);
+  opacity: 0;
+  transition: opacity 0.4s var(--ease);
+  align-self: center;
+}
+
+.hud-saved.on {
+  opacity: 0.8;
+}
+
+.resume-note {
+  font-family: 'Songti SC', 'SimSun', serif;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(243, 239, 228, 0.42);
+  margin-top: 14px;
+}

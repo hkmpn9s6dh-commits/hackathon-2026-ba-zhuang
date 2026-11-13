@@ -15,6 +15,7 @@ import { evaluateKiln } from './sim/evaluate';
 import { freeSlots, forecast, slotFactor, SLOTS } from './sim/kiln';
 import { ending, settle, type Settlement } from './sim/score';
 import type { Choice, EventDef, Piece, Ware } from './sim/types';
+import { restore, type RunSave } from './save';
 
 export type Phase = 'title' | 'brief' | 'load' | 'fire' | 'open' | 'settle' | 'end';
 
@@ -68,6 +69,8 @@ const EMPTY_SLOTS = (): (number | null)[] => Array.from({ length: SLOTS }, () =>
 
 export class Game {
   state: GameState = this.fresh();
+  /** Set by the shell so the collection can be written to disk. */
+  onCodex: ((codex: GameState['collected']) => void) | null = null;
 
   private fresh(): GameState {
     return {
@@ -104,6 +107,20 @@ export class Game {
 
   reset(): void {
     this.state = this.fresh();
+  }
+
+  /** Come back to a night that was interrupted. */
+  resume(save: RunSave): boolean {
+    const state = restore(save, this.state.collected);
+    if (!state) return false;
+    this.state = state;
+    this.say('回来了。火还在。');
+    return true;
+  }
+
+  /** Adopt the collection that was on disk. */
+  seedCodex(codex: GameState['collected']): void {
+    this.state.collected = { ...codex, ...this.state.collected };
   }
 
   begin(): void {
@@ -319,6 +336,7 @@ export class Game {
 
   private toSettle(): void {
     const s = this.state;
+    this.onCodex?.(s.collected);
     const rank = ['over', 'under', 'cracked', 'good', 'excellent', 'flambe'];
     for (const p of s.pieces) {
       const id = p.ware.def.id;

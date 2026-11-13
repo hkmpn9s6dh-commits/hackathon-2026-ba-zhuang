@@ -93,8 +93,11 @@ async function runFireUntilOpen(maxRounds = 60) {
 }
 
 try {
-  const t0 = Date.now();
   await page.goto(base, { waitUntil: 'domcontentloaded' });
+  // Start from a clean slate: no run in progress, empty collection.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const t0 = Date.now();
   await page.waitForSelector('.big-title', { timeout: 5000 });
   check('AC-1 title appears under 3s', Date.now() - t0 < 3000, `${Date.now() - t0}ms`);
   check('AC-1 no external requests', external.length === 0, external.join(', '));
@@ -279,6 +282,33 @@ try {
     if (w === 390) await shot('09-mobile');
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Resume: a night left half-fired must survive a reload.
+  await wait(400);
+  const beforeSave = await state();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.big-title', { timeout: 8000 });
+  const cont = await page.locator('#continue').count();
+  check('AC-18 a saved night offers 继续', cont === 1);
+  const note = cont ? await page.locator('.resume-note').textContent() : '';
+  check('AC-18 the title says where you left off', !!note && note.length > 2, (note ?? '').trim());
+  await page.click('#continue');
+  await wait(500);
+  const after = await state();
+  check(
+    'AC-18 resumes in the same place',
+    after.phase === beforeSave.phase && Math.abs(after.fire.t - beforeSave.fire.t) < 2,
+    `${beforeSave.phase}@${beforeSave.fire.t.toFixed(0)} → ${after.phase}@${after.fire.t.toFixed(0)}`,
+  );
+
+  // The collection must survive a reload too.
+  await page.evaluate(() => localStorage.setItem('ba-zhuang.codex.v1', JSON.stringify({ v: 1, codex: { 'yingqing-bowl': { count: 3, best: 'excellent' } } })));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.big-title', { timeout: 8000 });
+  await page.click('text=瓷谱');
+  await wait(500);
+  const owned = await page.locator('.pown').allTextContents();
+  check('AC-18 瓷谱 remembers what you fired', owned.some((t) => t.includes('已得 3 件')), owned.join(' | ').slice(0, 40));
 
   check('AC-13 no console errors', problems.length === 0, problems.slice(0, 3).join(' | '));
 } catch (err) {

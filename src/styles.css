@@ -582,13 +582,13 @@ button:focus-visible,
 
 .big-title {
   font-family: 'Songti SC', 'SimSun', serif;
-  font-size: clamp(64px, 11vw, 112px);
+  font-size: clamp(68px, 12vw, 124px);
   font-weight: 400;
   letter-spacing: 0.28em;
   line-height: 1;
   text-indent: 0.28em;
-  color: #f6f2e7;
-  text-shadow: 0 0 46px rgba(226, 87, 31, 0.35);
+  color: #fbf7ec;
+  text-shadow: 0 0 60px rgba(226, 87, 31, 0.5), 0 2px 30px rgba(0, 0, 0, 0.6);
   margin-bottom: 20px;
 }
 
@@ -597,7 +597,21 @@ button:focus-visible,
   font-size: clamp(15px, 2vw, 19px);
   letter-spacing: 0.2em;
   color: var(--porcelain-dim);
+  margin-bottom: 8px;
+}
+
+.tagline-en {
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  color: rgba(243, 239, 228, 0.34);
   margin-bottom: 34px;
+}
+
+.title-rule {
+  width: 96px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(226, 87, 31, 0.9), rgba(226, 87, 31, 0));
+  margin-bottom: 18px;
 }
 
 .title-actions {

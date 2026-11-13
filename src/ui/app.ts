@@ -258,8 +258,10 @@ export class App {
     const wrap = EL('div', 'title-wrap');
     const inner = EL('div', 'inner');
     inner.appendChild(EL('div', 'kicker', '景德镇 · 柴窑 · 一夜'));
+    inner.appendChild(EL('div', 'title-rule'));
     inner.appendChild(EL('h1', 'big-title', '把桩'));
     inner.appendChild(EL('p', 'tagline', '一窑火，十二个时辰，一片瓷告诉你火候'));
+    inner.appendChild(EL('p', 'tagline-en', 'BA ZHUANG — THE KILN MASTER'));
     const acts = EL('div', 'title-actions');
     const start = EL('button', 'btn btn-primary', '点火');
     start.addEventListener('click', () => this.advance());

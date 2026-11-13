@@ -159,16 +159,26 @@ export class Scene {
     const s = game.state;
     const phase: Phase = s.phase;
     const idle = phase === 'title' || phase === 'brief';
-    const heat = phase === 'fire' ? s.fire.temp : phase === 'load' ? 0.17 : idle ? 0.22 : Math.max(0.2, s.peak * 0.95);
+    const heat = phase === 'fire' ? s.fire.temp : phase === 'load' ? 0.17 : idle ? 0.8 : Math.max(0.2, s.peak * 0.95);
 
     ctx.clearRect(0, 0, l.w, l.h);
     this.sky(ctx, l, now, heat, phase);
     this.hills(ctx, l, heat);
     this.ground(ctx, l, heat);
     this.woodpile(ctx, l, game);
+    const zoom = phase === 'title';
+    if (zoom) {
+      const px = l.fire.x + l.fire.w * 0.55;
+      const py = l.groundY - l.cell * 0.2;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.scale(1.18, 1.18);
+      ctx.translate(-px, -py);
+    }
     this.kiln(ctx, l, game, heat, phase, now);
     this.master(ctx, l, game, now);
     this.fire(ctx, l, heat, now);
+    if (zoom) ctx.restore();
     this.updateParticles(l, heat, phase, dt);
     this.drawParticles(ctx);
     if (l.chart && phase !== 'title') this.chart(ctx, l, game, now);
@@ -273,9 +283,9 @@ export class Scene {
       4,
       l.fire.x + l.fire.w * 0.5,
       y + 4,
-      l.cell * 3.2,
+      l.cell * (heat > 0.5 ? 4.6 : 3.2),
     );
-    spill.addColorStop(0, fireColor(heat, 0.14));
+    spill.addColorStop(0, fireColor(heat, heat > 0.5 ? 0.34 : 0.14));
     spill.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = spill;
     ctx.fillRect(0, y, l.w, l.h - y);
@@ -374,10 +384,11 @@ export class Scene {
       ctx.lineTo(cx + profile(t), base - (base - top) * t);
     }
     ctx.closePath();
+    const litBody = phase === 'title';
     const body = ctx.createLinearGradient(left, top, right, base);
-    body.addColorStop(0, '#2c1e15');
-    body.addColorStop(0.45, '#241811');
-    body.addColorStop(1, '#150e09');
+    body.addColorStop(0, litBody ? '#4a3122' : '#2c1e15');
+    body.addColorStop(0.45, litBody ? '#3a2718' : '#241811');
+    body.addColorStop(1, litBody ? '#241610' : '#150e09');
     ctx.fillStyle = body;
     ctx.fill();
 
@@ -407,8 +418,8 @@ export class Scene {
       l.fire.y,
       l.cell * 4.4,
     );
-    lit.addColorStop(0, fireColor(heat, 0.46));
-    lit.addColorStop(0.35, fireColor(heat * 0.85, 0.14));
+    lit.addColorStop(0, fireColor(heat, phase === 'title' ? 0.72 : 0.46));
+    lit.addColorStop(0.35, fireColor(heat * 0.85, phase === 'title' ? 0.3 : 0.14));
     lit.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = lit;
     ctx.fillRect(left - 30, top, right - left + 60, base - top);
@@ -717,93 +728,103 @@ export class Scene {
   /** The 把桩 himself, a silhouette by the door, hook in hand. */
   private master(ctx: CanvasRenderingContext2D, l: Layout, game: Game, now: number): void {
     const phase = game.state.phase;
-    if (phase === 'title') return;
     const f = l.fire;
-    const h = l.cell * 1.55;
-    const x = f.x - l.cell * 0.5;
-    const ground = l.groundY;
-    const sway = Math.sin(now * 0.0009) * l.cell * 0.006;
+    const title = phase === 'title';
+    const h = l.cell * (title ? 2.5 : 1.55);
+    const x = f.x - l.cell * (title ? 0.8 : 0.5);
+    const g0 = l.groundY;
+    const sway = Math.sin(now * 0.0008) * l.cell * 0.005;
+    const u = h / 100;
 
     ctx.save();
-    // Shadow.
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
     ctx.beginPath();
-    ctx.ellipse(x, ground, l.cell * 0.2, l.cell * 0.035, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + u * 4, g0, u * 20, u * 3.4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const body = ctx.createLinearGradient(x - l.cell * 0.2, 0, x + l.cell * 0.2, 0);
-    body.addColorStop(0, '#05080c');
-    body.addColorStop(0.7, '#080c12');
-    body.addColorStop(1, '#1a1410');
-    ctx.fillStyle = body;
-
-    // Legs.
-    ctx.beginPath();
-    ctx.moveTo(x - l.cell * 0.075, ground);
-    ctx.lineTo(x - l.cell * 0.03, ground - h * 0.42);
-    ctx.lineTo(x + l.cell * 0.035, ground - h * 0.42);
-    ctx.lineTo(x + l.cell * 0.09, ground);
-    ctx.closePath();
-    ctx.fill();
-
-    // Torso + coat.
-    ctx.beginPath();
-    ctx.moveTo(x - l.cell * 0.14 + sway, ground - h * 0.34);
-    ctx.quadraticCurveTo(x - l.cell * 0.17, ground - h * 0.7, x - l.cell * 0.1 + sway, ground - h * 0.82);
-    ctx.lineTo(x + l.cell * 0.1 + sway, ground - h * 0.82);
-    ctx.quadraticCurveTo(x + l.cell * 0.17, ground - h * 0.7, x + l.cell * 0.14 + sway, ground - h * 0.34);
-    ctx.closePath();
-    ctx.fill();
-
-    // Head.
-    ctx.beginPath();
-    ctx.arc(x + sway, ground - h * 0.9, l.cell * 0.082, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 斗笠: a low cone, the one shape everybody reads as "kiln worker".
-    ctx.beginPath();
-    ctx.moveTo(x - l.cell * 0.19 + sway, ground - h * 0.93);
-    ctx.quadraticCurveTo(x + sway, ground - h * 1.02, x + l.cell * 0.19 + sway, ground - h * 0.93);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(226,120,60,0.34)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x - l.cell * 0.19 + sway, ground - h * 0.93);
-    ctx.quadraticCurveTo(x + sway, ground - h * 1.02, x + l.cell * 0.19 + sway, ground - h * 0.93);
-    ctx.stroke();
-
-    // Near arm, reaching toward the door.
-    ctx.strokeStyle = '#06090d';
-    ctx.lineWidth = l.cell * 0.055;
+    const ink = ctx.createLinearGradient(x - u * 20, 0, x + u * 18, 0);
+    ink.addColorStop(0, '#04070b');
+    ink.addColorStop(0.62, '#070b11');
+    ink.addColorStop(1, '#1a120c');
+    ctx.fillStyle = ink;
     ctx.lineCap = 'round';
+
+    // Legs, with a gap so it reads as a man and not a post.
     ctx.beginPath();
-    ctx.moveTo(x + l.cell * 0.1 + sway, ground - h * 0.74);
-    ctx.quadraticCurveTo(x + l.cell * 0.2, ground - h * 0.62, x + l.cell * 0.16, ground - h * 0.5);
+    ctx.moveTo(x - u * 8, g0);
+    ctx.lineTo(x - u * 5.5, g0 - u * 34);
+    ctx.lineTo(x - u * 1, g0 - u * 34);
+    ctx.lineTo(x - u * 1, g0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + u * 2, g0);
+    ctx.lineTo(x + u * 2, g0 - u * 34);
+    ctx.lineTo(x + u * 6.5, g0 - u * 34);
+    ctx.lineTo(x + u * 9, g0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Long coat, narrower at the shoulders.
+    ctx.beginPath();
+    ctx.moveTo(x - u * 11 + sway, g0 - u * 30);
+    ctx.quadraticCurveTo(x - u * 10 + sway, g0 - u * 56, x - u * 8.5 + sway, g0 - u * 70);
+    ctx.quadraticCurveTo(x - u * 4 + sway, g0 - u * 78, x + u * 4 + sway, g0 - u * 78);
+    ctx.quadraticCurveTo(x + u * 8.5 + sway, g0 - u * 70, x + u * 10, g0 - u * 54);
+    ctx.quadraticCurveTo(x + u * 11, g0 - u * 46, x + u * 9, g0 - u * 30);
+    ctx.closePath();
+    ctx.fill();
+
+    // Head and neck.
+    ctx.beginPath();
+    ctx.arc(x + sway * 0.4, g0 - u * 84, u * 5.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(x + sway * 0.4 - u * 1.9, g0 - u * 80, u * 3.8, u * 5);
+
+    // 斗笠: a wide low cone.
+    ctx.beginPath();
+    ctx.moveTo(x - u * 13 + sway * 0.4, g0 - u * 87);
+    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 101, x + u * 13 + sway * 0.4, g0 - u * 87);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(230,132,66,0.42)';
+    ctx.lineWidth = Math.max(1, u * 0.9);
+    ctx.beginPath();
+    ctx.moveTo(x - u * 13 + sway * 0.4, g0 - u * 87);
+    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 101, x + u * 13 + sway * 0.4, g0 - u * 87);
     ctx.stroke();
 
-    // Shoulder rim light from the fire.
-    ctx.strokeStyle = 'rgba(226,120,60,0.5)';
-    ctx.lineWidth = 1.4;
+    // The near arm, and the hook resting toward the stoke hole.
+    const handX = x + u * 16;
+    const handY = g0 - u * 55;
+    ctx.strokeStyle = '#04070b';
+    ctx.lineWidth = u * 5.2;
     ctx.beginPath();
-    ctx.moveTo(x + l.cell * 0.1 + sway, ground - h * 0.8);
-    ctx.quadraticCurveTo(x + l.cell * 0.17, ground - h * 0.7, x + l.cell * 0.14, ground - h * 0.34);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x + sway, ground - h * 0.9, l.cell * 0.082, -0.9, 0.7);
+    ctx.moveTo(x + u * 7 + sway, g0 - u * 72);
+    ctx.quadraticCurveTo(x + u * 14, g0 - u * 66, handX, handY);
     ctx.stroke();
 
-    // The hook, resting toward the stoke hole.
     const hx = f.x + f.w + l.cell * 0.2;
     const hy = f.y + f.h * 0.5;
-    ctx.strokeStyle = 'rgba(14,10,8,0.95)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(10,7,5,0.96)';
+    ctx.lineWidth = Math.max(1.6, u * 1.5);
     ctx.beginPath();
-    ctx.moveTo(x + l.cell * 0.12, ground - h * 0.62);
-    ctx.lineTo(hx - l.cell * 0.04, hy + l.cell * 0.12);
+    ctx.moveTo(handX, handY);
+    ctx.lineTo(hx - l.cell * 0.03, hy + l.cell * 0.1);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(200,150,100,0.28)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(220,160,100,0.3)';
+    ctx.lineWidth = Math.max(0.8, u * 0.7);
+    ctx.stroke();
+
+    // Rim light along the side that faces the fire.
+    ctx.strokeStyle = 'rgba(232,132,62,0.55)';
+    ctx.lineWidth = Math.max(1, u * 1.1);
+    ctx.beginPath();
+    ctx.moveTo(x + u * 8.5 + sway, g0 - u * 70);
+    ctx.quadraticCurveTo(x + u * 10, g0 - u * 54, x + u * 9, g0 - u * 30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + sway * 0.4, g0 - u * 84, u * 5.4, -1.0, 0.8);
     ctx.stroke();
     ctx.restore();
   }

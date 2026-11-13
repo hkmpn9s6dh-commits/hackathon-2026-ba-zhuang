@@ -1,0 +1,13 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+const exe=['AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe','AppData/Local/ms-playwright/chromium-1200/chrome-win64/chrome.exe'].map(x=>homedir()+'/'+x).find(existsSync);
+const b = await chromium.launch({ executablePath: exe, headless: true });
+const p = await b.newPage({ viewport: { width: 1024, height: 1024 }, deviceScaleFactor: 2 });
+await p.goto('file:///C:/Users/张一/WorkBuddy/spaces/2026_11_12_22-57-34/ba-zhuang/proof/rank/r1/sheet.html');
+await p.waitForTimeout(800);
+await p.locator('.grid').screenshot({ path: 'ba-zhuang/proof/rank/r1/sheet.png' });
+await b.close();
+console.log('ok');

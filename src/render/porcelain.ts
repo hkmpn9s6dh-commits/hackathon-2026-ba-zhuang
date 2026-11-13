@@ -221,76 +221,131 @@ export function drawShard(
   ctx.clearRect(0, 0, w, h);
   const cx = w * 0.5;
   const cy = h * 0.52;
-  const s = Math.min(w, h) * 0.5;
+  const s = Math.min(w, h) * 0.46;
 
   ctx.save();
   ctx.translate(cx, cy);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  // Shadow under the shard.
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.beginPath();
-  ctx.ellipse(0, s * 0.95, s * 0.55, s * 0.1, 0, 0, Math.PI * 2);
+  ctx.ellipse(s * 0.06, s * 0.86, s * 0.62, s * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.rotate(-0.1);
-  ctx.beginPath();
-  ctx.moveTo(-s * 0.92, -s * 0.52);
-  ctx.lineTo(s * 0.18, -s * 0.86);
-  ctx.lineTo(s * 0.96, -s * 0.06);
-  ctx.lineTo(s * 0.42, s * 0.78);
-  ctx.lineTo(-s * 0.48, s * 0.62);
-  ctx.closePath();
 
+  // A splinter: two long broken edges, one sharp corner, one blunt.
+  const shape = new Path2D();
+  shape.moveTo(s * -1.02, s * -0.02);
+  shape.lineTo(s * -0.74, s * -0.36);
+  shape.lineTo(s * -0.36, s * -0.44);
+  shape.lineTo(s * -0.02, s * -0.6);
+  shape.lineTo(s * 0.36, s * -0.52);
+  shape.lineTo(s * 0.72, s * -0.56);
+  shape.lineTo(s * 0.96, s * -0.24);
+  shape.lineTo(s * 1.04, s * 0.06);
+  shape.lineTo(s * 0.7, s * 0.3);
+  shape.lineTo(s * 0.44, s * 0.52);
+  shape.lineTo(s * 0.06, s * 0.48);
+  shape.lineTo(s * -0.3, s * 0.56);
+  shape.lineTo(s * -0.62, s * 0.34);
+  shape.lineTo(s * -0.9, s * 0.22);
+  shape.closePath();
+
+  // Clay body (the broken edge, a warm line under the glaze).
+  ctx.fillStyle = 'rgba(206,178,138,0.98)';
+  ctx.save();
+  ctx.translate(s * 0.025, s * 0.055);
+  ctx.fill(shape, 'evenodd');
+  ctx.restore();
+
+  // Glaze surface.
   const raw = Math.max(0, 1 - maturity);
   const burnt = Math.max(0, maturity - 1);
-  const g = ctx.createLinearGradient(-s, -s, s, s);
-  g.addColorStop(0, maturity > 1 ? '#9a6338' : '#f7f3e8');
-  g.addColorStop(0.5, maturity > 1 ? '#cf9459' : `rgb(${236 - raw * 26},${233 - raw * 30},${222 - raw * 38})`);
-  g.addColorStop(1, `rgba(168,158,128,${0.85 + Math.min(0.15, maturity * 0.2)})`);
+  const g = ctx.createLinearGradient(-s, -s * 0.8, s * 0.8, s * 0.9);
+  if (burnt > 0.02) {
+    g.addColorStop(0, '#e2b98a');
+    g.addColorStop(0.45, '#c98f52');
+    g.addColorStop(1, '#8a5a30');
+  } else {
+    g.addColorStop(0, '#fdfbf3');
+    g.addColorStop(0.35, `rgb(${246 - raw * 22},${244 - raw * 26},${234 - raw * 34})`);
+    g.addColorStop(1, `rgb(${196 - raw * 30},${200 - raw * 34},${186 - raw * 40})`);
+  }
   ctx.fillStyle = g;
-  ctx.fill();
+  ctx.fill(shape, 'evenodd');
 
   ctx.save();
-  ctx.clip();
-  ctx.strokeStyle = `rgba(47,90,168,${0.3 + Math.min(0.5, maturity * 0.5)})`;
-  ctx.lineWidth = s * 0.1;
+  ctx.clip(shape, 'evenodd');
+
+  // Cobalt brush mark, following the surface.
+  ctx.strokeStyle = `rgba(38,78,150,${0.35 + Math.min(0.5, maturity * 0.5)})`;
+  ctx.lineWidth = s * 0.13;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(-s * 0.78, s * 0.12);
-  ctx.bezierCurveTo(-s * 0.24, -s * 0.34, s * 0.3, s * 0.48, s * 0.82, -s * 0.18);
+  ctx.moveTo(-s * 0.8, s * 0.05);
+  ctx.bezierCurveTo(-s * 0.3, -s * 0.3, s * 0.25, s * 0.42, s * 0.8, -s * 0.2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = s * 0.03;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.78, -s * 0.02);
+  ctx.bezierCurveTo(-s * 0.3, -s * 0.36, s * 0.25, s * 0.36, s * 0.78, -s * 0.26);
   ctx.stroke();
 
-  const gloss = Math.max(0, Math.min(1, (maturity - 0.45) / 0.6));
+  // Specular: the whole point of the shard. Raw glaze has none, ripe glaze is wet.
+  const gloss = Math.max(0, Math.min(1, (maturity - 0.4) / 0.55));
   if (gloss > 0.02) {
-    const lg = ctx.createLinearGradient(-s * 0.6, -s * 0.7, s * 0.2, s * 0.1);
-    lg.addColorStop(0, `rgba(255,255,255,${0.5 * gloss})`);
-    lg.addColorStop(0.4, `rgba(255,255,255,${0.07 * gloss})`);
+    const lg = ctx.createLinearGradient(-s * 0.7, -s * 0.8, s * 0.1, s * 0.2);
+    lg.addColorStop(0, `rgba(255,255,255,${0.62 * gloss})`);
+    lg.addColorStop(0.35, `rgba(255,255,255,${0.12 * gloss})`);
     lg.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = lg;
     ctx.fillRect(-s, -s, s * 2, s * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${0.5 * gloss})`;
+    ctx.lineWidth = s * 0.02;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.5, -s * 0.4);
+    ctx.quadraticCurveTo(-s * 0.1, -s * 0.55, s * 0.3, -s * 0.42);
+    ctx.stroke();
   }
 
+  // Unmelted beads while the glaze is still raw.
   if (maturity < 0.88) {
-    const beads = reduced ? 3 : 8;
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    const beads = reduced ? 2 : 5;
     for (let i = 0; i < beads; i++) {
-      const bx = -s * 0.62 + (((i * 37) % 100) / 100) * s * 1.3;
-      const by = s * 0.34 + (((i * 53) % 100) / 100) * s * 0.34;
+      const bx = -s * 0.6 + (((i * 37) % 100) / 100) * s * 1.2;
+      const by = s * 0.2 + (((i * 53) % 100) / 100) * s * 0.5;
+      ctx.fillStyle = `rgba(255,255,255,${0.75 - raw * 0.2})`;
       ctx.beginPath();
-      ctx.arc(bx, by, s * (0.045 + ((i * 17) % 10) / 220), 0, Math.PI * 2);
+      ctx.arc(bx, by, s * (0.022 + ((i * 17) % 10) / 320), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.beginPath();
+      ctx.arc(bx - s * 0.01, by - s * 0.01, s * 0.012, 0, Math.PI * 2);
       ctx.fill();
     }
   }
+
+  // Warm firelight from the lower left.
+  const warm = ctx.createLinearGradient(-s, s * 0.6, -s * 0.2, -s * 0.2);
+  warm.addColorStop(0, 'rgba(240,140,60,0.22)');
+  warm.addColorStop(1, 'rgba(240,140,60,0)');
+  ctx.fillStyle = warm;
+  ctx.fillRect(-s, -s, s * 2, s * 2);
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Rim of the glaze where it broke.
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = Math.max(1, s * 0.015);
+  ctx.stroke(shape);
 
   if (burnt > 0) {
-    ctx.fillStyle = 'rgba(176,106,48,0.9)';
+    ctx.fillStyle = 'rgba(168,100,44,0.85)';
     for (let i = 0; i < 3; i++) {
-      const dx = -s * 0.4 + i * s * 0.45;
+      const dx = -s * 0.35 + i * s * 0.4;
       ctx.beginPath();
-      ctx.ellipse(dx, s * 0.74 + i * s * 0.03, s * 0.06, s * (0.1 + burnt * 0.16), 0, 0, Math.PI * 2);
+      ctx.ellipse(dx, s * 0.62 + i * s * 0.02, s * 0.05, s * (0.08 + burnt * 0.14), 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }

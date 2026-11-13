@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>把桩 · 一窑火，十二个时辰</title>
+    <meta
+      name="description"
+      content="《把桩》——景德镇柴窑的一夜。满窑、烧窑、开窑，没有温度计，只有一片从火眼里拉出来的瓷。"
+    />
+    <meta name="theme-color" content="#080d16" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23080d16'/%3E%3Ccircle cx='16' cy='21' r='7' fill='%23e2571f'/%3E%3Ccircle cx='16' cy='21' r='3' fill='%23ffc46b'/%3E%3C/svg%3E"
+    />
+    <script type="module" crossorigin src="./assets/index-DwDQXUWH.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/style-fJxhjGNX.css">
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud" aria-label="窑况">
+        <div class="hud-left">
+          <span id="hud-night" class="tag">第一夜</span>
+          <span id="hud-name">试烧</span>
+        </div>
+        <div id="hud-quarters" aria-hidden="true"></div>
+        <div class="hud-right">
+          <span id="hud-saved" class="hud-saved" aria-hidden="true">已存</span>
+          <span class="hud-stat"><b id="hud-wood">0</b><i>把柴</i></span>
+          <span class="hud-stat"><b id="hud-coins">0</b><i>文</i></span>
+        </div>
+      </header>
+
+      <main id="stage">
+        <canvas id="scene"></canvas>
+        <div id="overlay"></div>
+      </main>
+
+      <footer id="bar"></footer>
+    </div>
+    <noscript>这口窑要开 JavaScript 才能烧。</noscript>
+  </body>
+</html>

@@ -1,4 +1,10 @@
-/** Porcelain, drawn procedurally. No images anywhere in this game. */
+/**
+ * Porcelain, drawn procedurally.
+ *
+ * The look we want is a small painted object under one warm light: a cylinder
+ * shaded across its width, a real mouth you can see into, a foot ring with its
+ * own shadow, and one painted band that survives at 50 px.
+ */
 
 import type { WareDef } from '../sim/types';
 
@@ -10,36 +16,77 @@ export function shapeOf(id: string): WareShape {
   return 'bowl';
 }
 
+/** Height that keeps a piece inside a box of maxW × maxH. */
+export function fitWare(id: string, maxW: number, maxH: number): number {
+  const shape = shapeOf(id);
+  const ratio = shape === 'vase' ? 0.56 : shape === 'jar' ? 0.86 : 1.38;
+  return Math.min(maxH, maxW / ratio);
+}
+
 export interface WarePaint {
-  /** 0..1, how hot this piece thinks it got; drives the glow. */
+  /** 0..1, how hot this piece thinks it got; warms the clay. */
   heat?: number;
   over?: boolean;
   cracked?: boolean;
   flambe?: boolean;
-  /** Slight sag for overfired pieces. */
   droop?: number;
-  /** 0..1, how much ambient light reaches it. Low inside the kiln. */
+  /** 0..1, how much light reaches it. Low inside the kiln. */
   dim?: number;
+  /** Per-piece seed: hand-thrown things are never identical. */
+  seed?: number;
 }
 
-const GLAZE: Record<string, [string, string]> = {
-  yingqing: ['#eef4ef', '#b6cec3'],
-  qinghua: ['#f4f1e7', '#ddd6c4'],
-  jihong: ['#bb4130', '#701c10'],
+interface Glaze {
+  deep: string;
+  dark: string;
+  mid: string;
+  light: string;
+  spec: string;
+  paint: string | null;
+}
+
+const GLAZE: Record<string, Glaze> = {
+  yingqing: {
+    deep: '#546b65',
+    dark: '#9db4ac',
+    mid: '#d7e7e0',
+    light: '#fbfefc',
+    spec: 'rgba(255,255,255,0.9)',
+    paint: null,
+  },
+  qinghua: {
+    deep: '#6f6a5c',
+    dark: '#b3ab97',
+    mid: '#e6dfcd',
+    light: '#fffdf6',
+    spec: 'rgba(255,255,255,0.9)',
+    paint: '#2b4f9e',
+  },
+  jihong: {
+    deep: '#3a0c06',
+    dark: '#7d1d10',
+    mid: '#b23a22',
+    light: '#dd7355',
+    spec: 'rgba(255,220,200,0.75)',
+    paint: null,
+  },
 };
 
-const N = 16;
+const N = 18;
 
-/** Half-width profile for each shape, t = 0 at the rim/base, 1 at the other end. */
 function halfProfile(shape: WareShape, w: number, t: number): number {
-  if (shape === 'bowl') return (w / 2) * (1 - 0.5 * Math.pow(t, 2.1));
-  if (shape === 'jar') return (w / 2) * Math.pow(Math.max(0, Math.sin(Math.PI * (0.16 + 0.7 * t))), 0.5);
-  // vase: foot -> belly -> neck -> lip
+  if (shape === 'bowl') {
+    // Wide mouth, a belly that curves in late, a small foot.
+    const r = 1 - 0.5 * Math.pow(t, 2.6);
+    const flare = t < 0.08 ? 0.03 * (1 - t / 0.08) : 0;
+    return (w / 2) * (r + flare);
+  }
+  if (shape === 'jar') return (w / 2) * Math.pow(Math.max(0, Math.sin(Math.PI * (0.18 + 0.68 * t))), 0.46);
   const belly = w / 2;
-  if (t < 0.16) return belly * (0.34 + (0.66 * t) / 0.16);
-  if (t < 0.52) return belly * (1 - 0.06 * Math.sin(((t - 0.16) / 0.36) * Math.PI));
-  if (t < 0.8) return belly * (0.94 - (0.78 * (t - 0.52)) / 0.28);
-  return belly * (0.16 + (0.14 * (t - 0.8)) / 0.2);
+  if (t < 0.14) return belly * (0.36 + (0.64 * t) / 0.14);
+  if (t < 0.5) return belly * (1 - 0.04 * Math.sin(((t - 0.14) / 0.36) * Math.PI));
+  if (t < 0.78) return belly * (0.96 - (0.8 * (t - 0.5)) / 0.28);
+  return belly * (0.16 + (0.12 * (t - 0.78)) / 0.22);
 }
 
 function bodyPath(ctx: CanvasRenderingContext2D, shape: WareShape, w: number, h: number): void {
@@ -56,7 +103,86 @@ function bodyPath(ctx: CanvasRenderingContext2D, shape: WareShape, w: number, h:
   ctx.closePath();
 }
 
-/** Draw a piece centred on (cx, cy) with the given body height; cy is the foot. */
+/** A cylinder lit from the left: this single gradient is most of the “not cheap”. */
+function cylinder(ctx: CanvasRenderingContext2D, g: Glaze, w: number): CanvasGradient {
+  const grad = ctx.createLinearGradient(-w * 0.5, 0, w * 0.5, 0);
+  grad.addColorStop(0, g.dark);
+  grad.addColorStop(0.1, g.mid);
+  grad.addColorStop(0.28, g.light);
+  grad.addColorStop(0.46, g.mid);
+  grad.addColorStop(0.74, g.dark);
+  grad.addColorStop(0.92, g.deep);
+  grad.addColorStop(1, g.dark);
+  return grad;
+}
+
+/** One painted band that still reads when the whole piece is 50 px tall. */
+function paintBand(
+  ctx: CanvasRenderingContext2D,
+  def: WareDef,
+  g: Glaze,
+  shape: WareShape,
+  w: number,
+  h: number,
+  dim: number,
+): void {
+  const ink = g.paint;
+  if (!ink) {
+    ctx.strokeStyle = `rgba(96,126,118,${0.34 * dim})`;
+    ctx.lineWidth = Math.max(0.7, h * 0.014);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 9; i++) {
+      const spread = -0.42 + i * 0.105;
+      ctx.beginPath();
+      ctx.moveTo(w * spread * 0.5, h * 0.88);
+      ctx.quadraticCurveTo(w * spread * 0.85, h * 0.74, w * spread * 1.02, h * 0.58);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.44, h * 0.9);
+    ctx.quadraticCurveTo(0, h * 0.86, w * 0.44, h * 0.9);
+    ctx.stroke();
+    return;
+  }
+
+  if (def.kind === 'qinghua') {
+    const top = shape === 'bowl' ? 0.16 : 0.2;
+    const bottom = shape === 'bowl' ? 0.72 : 0.76;
+    ctx.fillStyle = `rgba(43,79,158,${0.8 * dim})`;
+    ctx.fillRect(-w, h * top, w * 2, Math.max(1, h * 0.035));
+    ctx.fillRect(-w, h * (top + 0.06), w * 2, Math.max(0.8, h * 0.018));
+    ctx.fillRect(-w, h * bottom, w * 2, Math.max(1, h * 0.03));
+
+    const y0 = h * ((top + bottom) / 2 + 0.02);
+    ctx.strokeStyle = `rgba(43,79,158,${0.92 * dim})`;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1, h * 0.03);
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.62, y0 + h * 0.02);
+    ctx.bezierCurveTo(-w * 0.3, y0 - h * 0.1, -w * 0.05, y0 + h * 0.1, w * 0.18, y0 - h * 0.02);
+    ctx.bezierCurveTo(w * 0.38, y0 - h * 0.1, w * 0.5, y0 + h * 0.04, w * 0.62, y0 - h * 0.02);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(43,79,158,${0.85 * dim})`;
+    for (let i = 0; i < 5; i++) {
+      const lx = -w * 0.46 + i * w * 0.24;
+      const ly = y0 - h * 0.03 + (i % 2 ? h * 0.05 : -h * 0.04);
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, w * 0.05, h * 0.028, i % 2 ? 0.5 : -0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  ctx.strokeStyle = `rgba(255,210,190,${0.22 * dim})`;
+  ctx.lineWidth = Math.max(0.8, h * 0.014);
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.42, h * 0.16);
+  ctx.quadraticCurveTo(0, h * 0.1, w * 0.42, h * 0.16);
+  ctx.stroke();
+}
+
+/** Draw a piece; `cy` is the foot. */
 export function drawWare(
   ctx: CanvasRenderingContext2D,
   def: WareDef,
@@ -66,144 +192,167 @@ export function drawWare(
   paint: WarePaint = {},
 ): void {
   const shape = shapeOf(def.id);
-  const ratio = shape === 'vase' ? 0.58 : shape === 'jar' ? 0.82 : 1.05;
+  const ratio = shape === 'vase' ? 0.56 : shape === 'jar' ? 0.86 : 1.38;
   const w = height * ratio;
   const h = height;
-  const [light, dark] = GLAZE[def.kind] ?? GLAZE.yingqing;
+  const g = GLAZE[def.kind] ?? GLAZE.yingqing;
   const dim = paint.dim ?? 1;
 
   ctx.save();
   ctx.translate(cx, cy - h);
-  if (paint.droop) ctx.transform(1, 0, 0, 1 + paint.droop * 0.1, 0, 0);
-
-  // Contact shadow on the shelf.
-  ctx.fillStyle = `rgba(0,0,0,${0.3 * dim})`;
-  ctx.beginPath();
-  ctx.ellipse(0, 1, w * 0.36, Math.max(1.5, h * 0.03), 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const g = ctx.createLinearGradient(-w * 0.5, 0, w * 0.55, h);
-  g.addColorStop(0, paint.flambe ? '#c9664f' : light);
-  g.addColorStop(0.5, paint.flambe ? '#d2806a' : light);
-  g.addColorStop(1, paint.flambe ? '#487a82' : dark);
-  bodyPath(ctx, shape, w, h);
-  ctx.fillStyle = g;
-  ctx.fill();
-
-  // Mouth of the vessel: the detail that makes a bowl read as a bowl.
-  if (shape === 'bowl') {
-    const ry = Math.max(1.6, w * 0.075);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, w * 0.49, ry, 0, 0, Math.PI * 2);
-    const inner = ctx.createLinearGradient(0, -ry, 0, ry);
-    inner.addColorStop(0, paint.flambe ? '#4d2418' : '#3a3a33');
-    inner.addColorStop(0.7, paint.flambe ? '#6d4a3c' : '#5a564a');
-    inner.addColorStop(1, paint.flambe ? '#8a5f4c' : '#8d8474');
-    ctx.fillStyle = inner;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,255,255,${0.62 * dim})`;
-    ctx.lineWidth = Math.max(0.9, h * 0.01);
-    ctx.stroke();
-    // foot ring
-    ctx.fillStyle = `rgba(90,70,50,${0.55 * dim})`;
-    ctx.beginPath();
-    ctx.ellipse(0, h, w * 0.19, Math.max(1.2, h * 0.022), 0, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (shape === 'vase') {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, w * 0.115, Math.max(1.2, w * 0.035), 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(20,14,10,0.55)';
-    ctx.fill();
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, w * 0.3, Math.max(1.4, w * 0.055), 0, 0, Math.PI * 2);
-    ctx.fillStyle = paint.flambe ? '#8a3a2c' : light;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,255,255,${0.42 * dim})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  const tilt = paint.seed === undefined ? 0 : (((paint.seed * 37) % 100) / 100 - 0.5) * 0.05;
+  if (tilt) {
+    ctx.translate(0, h);
+    ctx.rotate(tilt);
+    ctx.translate(0, -h);
   }
+  if (paint.droop) ctx.transform(1, 0, 0, 1 + paint.droop * 0.09, 0, 0);
 
-  // Decoration, clipped to the body.
-  ctx.save();
+  ctx.fillStyle = `rgba(0,0,0,${0.42 * dim})`;
+  ctx.beginPath();
+  ctx.ellipse(0, h + Math.max(0.5, h * 0.012), w * 0.34, Math.max(1.2, h * 0.026), 0, 0, Math.PI * 2);
+  ctx.fill();
+
   bodyPath(ctx, shape, w, h);
+  ctx.fillStyle = cylinder(ctx, g, w);
+  ctx.fill();
+
+  ctx.save();
   ctx.clip();
 
-  if (def.kind === 'qinghua') {
-    ctx.strokeStyle = `rgba(47,90,168,${0.85 * dim})`;
-    ctx.lineWidth = Math.max(1, h * 0.014);
-    ctx.beginPath();
-    ctx.moveTo(-w, h * (shape === 'bowl' ? 0.22 : 0.18));
-    ctx.lineTo(w, h * (shape === 'bowl' ? 0.22 : 0.18));
-    ctx.moveTo(-w, h * 0.8);
-    ctx.lineTo(w, h * 0.8);
-    ctx.stroke();
-    ctx.lineWidth = Math.max(0.9, h * 0.009);
-    for (let i = 0; i < 5; i++) {
-      const bx = -w * 0.36 + i * w * 0.18;
-      ctx.beginPath();
-      ctx.moveTo(bx, h * 0.68);
-      ctx.bezierCurveTo(bx + w * 0.09, h * 0.54, bx + w * 0.13, h * 0.44, bx + w * 0.05, h * 0.3);
-      ctx.bezierCurveTo(bx + w * 0.01, h * 0.42, bx - w * 0.05, h * 0.54, bx, h * 0.68);
-      ctx.stroke();
-    }
-  } else if (def.kind === 'jihong') {
-    ctx.fillStyle = 'rgba(255,225,205,0.14)';
-    ctx.fillRect(-w, h * 0.04, w * 2, h * 0.05);
-    ctx.fillStyle = 'rgba(30,0,0,0.2)';
-    ctx.fillRect(-w, h * 0.88, w * 2, h * 0.08);
-    if (paint.flambe) {
-      ctx.fillStyle = 'rgba(70,140,150,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(-w * 0.08, h * 0.45, w * 0.22, h * 0.3, 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else {
-    ctx.strokeStyle = `rgba(255,255,255,${0.5 * dim})`;
-    ctx.lineWidth = Math.max(0.8, h * 0.007);
-    for (let i = 0; i < 5; i++) {
-      const bx = -w * 0.4 + i * w * 0.2;
-      ctx.beginPath();
-      ctx.moveTo(bx, h * 0.72);
-      ctx.bezierCurveTo(bx + w * 0.06, h * 0.58, bx + w * 0.1, h * 0.46, bx + w * 0.04, h * 0.34);
-      ctx.stroke();
-    }
-  }
+  const foot = ctx.createLinearGradient(0, h * 0.72, 0, h);
+  foot.addColorStop(0, 'rgba(0,0,0,0)');
+  foot.addColorStop(1, `rgba(0,0,0,${0.34 * dim})`);
+  ctx.fillStyle = foot;
+  ctx.fillRect(-w, h * 0.72, w * 2, h * 0.3);
 
-  if (paint.heat && paint.heat > 0.03) {
-    ctx.fillStyle = `rgba(232,128,52,${Math.min(0.3, paint.heat * 0.4)})`;
+  // Core shadow on the away-from-fire side, then a rim light on the near side.
+  const core = ctx.createLinearGradient(w * 0.06, 0, w * 0.52, 0);
+  core.addColorStop(0, 'rgba(0,0,0,0)');
+  core.addColorStop(1, `rgba(24,34,32,${0.34 * dim})`);
+  ctx.fillStyle = core;
+  ctx.fillRect(-w, 0, w * 2, h);
+
+  const near = ctx.createLinearGradient(-w * 0.5, 0, -w * 0.2, 0);
+  near.addColorStop(0, `rgba(255,255,255,${0.34 * dim})`);
+  near.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = near;
+  ctx.fillRect(-w, 0, w, h);
+
+  paintBand(ctx, def, g, shape, w, h, dim);
+
+  if (paint.heat && paint.heat > 0.04) {
+    const warm = ctx.createLinearGradient(-w * 0.5, h, w * 0.2, 0);
+    warm.addColorStop(0, `rgba(255,140,60,${Math.min(0.26, paint.heat * 0.4)})`);
+    warm.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = warm;
     ctx.fillRect(-w, 0, w * 2, h);
   }
 
   if (paint.over) {
-    ctx.fillStyle = 'rgba(120,70,30,0.32)';
-    ctx.beginPath();
-    ctx.ellipse(0, h * 0.99, w * 0.5, h * 0.07, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const run = ctx.createLinearGradient(0, h * 0.78, 0, h);
+    run.addColorStop(0, 'rgba(120,66,26,0)');
+    run.addColorStop(1, 'rgba(120,66,26,0.5)');
+    ctx.fillStyle = run;
+    ctx.fillRect(-w, h * 0.78, w * 2, h * 0.22);
   }
 
-  // Ambient shading: what the kiln does not light stays in shadow.
   if (dim < 1) {
-    ctx.fillStyle = `rgba(6,4,3,${(1 - dim) * 0.55})`;
+    ctx.fillStyle = `rgba(22,12,7,${(1 - dim) * 0.7})`;
     ctx.fillRect(-w, 0, w * 2, h);
   }
   ctx.restore();
 
-  // Rim highlight.
-  ctx.strokeStyle = `rgba(255,255,255,${0.4 * dim})`;
-  ctx.lineWidth = Math.max(0.8, h * 0.008);
+  // Specular streak.
+  const gloss = 0.5 + 0.5 * Math.min(1, dim + 0.2);
+  ctx.save();
   bodyPath(ctx, shape, w, h);
-  ctx.stroke();
+  ctx.clip();
+  ctx.filter = 'blur(1px)';
+  ctx.fillStyle = `rgba(255,255,255,${0.3 * gloss})`;
+  ctx.beginPath();
+  ctx.ellipse(-w * 0.22, h * 0.42, w * 0.05, h * 0.26, -0.06, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.filter = 'none';
+  ctx.restore();
+
+  // Mouth.
+  if (shape === 'bowl') {
+    const ry = Math.max(1.6, w * 0.055);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.5, ry, 0, 0, Math.PI * 2);
+    const inner = ctx.createLinearGradient(0, -ry, 0, ry);
+    inner.addColorStop(0, 'rgba(38,52,48,0.92)');
+    inner.addColorStop(0.6, 'rgba(58,74,68,0.9)');
+    inner.addColorStop(1, 'rgba(120,136,128,0.85)');
+    ctx.fillStyle = inner;
+    ctx.fill();
+    // the far wall of the bowl, seen through the mouth
+    ctx.beginPath();
+    ctx.ellipse(0, -ry * 0.25, w * 0.4, ry * 0.55, 0, 0, Math.PI);
+    ctx.fillStyle = 'rgba(20,30,26,0.5)';
+    ctx.fill();
+    // The inner wall you can see across the bowl: this is what says “vessel”.
+    ctx.beginPath();
+    ctx.ellipse(0, ry * 0.55, w * 0.46, ry * 0.86, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.5 * dim})`;
+    ctx.lineWidth = Math.max(0.8, h * 0.012);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.5, ry, 0, Math.PI * 1.02, Math.PI * 1.98);
+    ctx.stroke();
+    const fr = w * 0.19;
+    const fh = Math.max(1.5, h * 0.035);
+    ctx.fillStyle = g.deep;
+    ctx.beginPath();
+    ctx.moveTo(-fr, h - fh);
+    ctx.lineTo(-fr, h - fh * 0.2);
+    ctx.quadraticCurveTo(0, h - fh * 0.2 + fr * 0.18, fr, h - fh * 0.2);
+    ctx.lineTo(fr, h - fh);
+    ctx.quadraticCurveTo(0, h - fh + fr * 0.18, -fr, h - fh);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = `rgba(60,44,30,${0.55 * dim})`;
+    ctx.beginPath();
+    ctx.ellipse(0, h, fr, Math.max(1, h * 0.016), 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (shape === 'vase') {
+    const ry = Math.max(1.2, w * 0.03);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.1, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(18,12,8,0.75)';
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.45 * dim})`;
+    ctx.lineWidth = Math.max(0.7, h * 0.01);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(60,44,30,${0.45 * dim})`;
+    ctx.beginPath();
+    ctx.ellipse(0, h, w * 0.2, Math.max(0.8, h * 0.012), 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.44, Math.max(1.6, w * 0.07), 0, 0, Math.PI * 2);
+    const lid = ctx.createLinearGradient(-w * 0.4, 0, w * 0.4, 0);
+    lid.addColorStop(0, g.dark);
+    lid.addColorStop(0.3, g.light);
+    lid.addColorStop(1, g.deep);
+    ctx.fillStyle = lid;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(0,0,0,${0.35 * dim})`;
+    ctx.lineWidth = Math.max(0.8, h * 0.01);
+    ctx.stroke();
+  }
 
   if (paint.cracked) {
-    ctx.strokeStyle = 'rgba(30,22,18,0.8)';
-    ctx.lineWidth = Math.max(1, h * 0.009);
+    ctx.strokeStyle = 'rgba(28,20,14,0.85)';
+    ctx.lineWidth = Math.max(1, h * 0.008);
     for (let i = 0; i < 3; i++) {
-      const x0 = -w * 0.16 + i * w * 0.15;
+      const x0 = -w * 0.14 + i * w * 0.14;
       ctx.beginPath();
-      ctx.moveTo(x0, h * 0.12);
-      ctx.lineTo(x0 + w * 0.04, h * 0.42);
-      ctx.lineTo(x0 - w * 0.02, h * 0.66);
+      ctx.moveTo(x0, h * 0.1);
+      ctx.lineTo(x0 + w * 0.04, h * 0.4);
+      ctx.lineTo(x0 - w * 0.02, h * 0.64);
       ctx.stroke();
     }
   }
@@ -226,40 +375,27 @@ export function drawShard(
   ctx.save();
   ctx.translate(cx, cy);
 
-  // Shadow under the shard.
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.beginPath();
   ctx.ellipse(s * 0.06, s * 0.86, s * 0.62, s * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.rotate(-0.1);
 
-  // A splinter: two long broken edges, one sharp corner, one blunt.
+  const pts: [number, number][] = [
+    [-1.02, -0.02], [-0.74, -0.36], [-0.36, -0.44], [-0.02, -0.6], [0.36, -0.52],
+    [0.72, -0.56], [0.96, -0.24], [1.04, 0.06], [0.7, 0.3], [0.44, 0.52],
+    [0.06, 0.48], [-0.3, 0.56], [-0.62, 0.34], [-0.9, 0.22],
+  ];
   const shape = new Path2D();
-  shape.moveTo(s * -1.02, s * -0.02);
-  shape.lineTo(s * -0.74, s * -0.36);
-  shape.lineTo(s * -0.36, s * -0.44);
-  shape.lineTo(s * -0.02, s * -0.6);
-  shape.lineTo(s * 0.36, s * -0.52);
-  shape.lineTo(s * 0.72, s * -0.56);
-  shape.lineTo(s * 0.96, s * -0.24);
-  shape.lineTo(s * 1.04, s * 0.06);
-  shape.lineTo(s * 0.7, s * 0.3);
-  shape.lineTo(s * 0.44, s * 0.52);
-  shape.lineTo(s * 0.06, s * 0.48);
-  shape.lineTo(s * -0.3, s * 0.56);
-  shape.lineTo(s * -0.62, s * 0.34);
-  shape.lineTo(s * -0.9, s * 0.22);
+  pts.forEach(([x, y], i) => (i === 0 ? shape.moveTo(s * x, s * y) : shape.lineTo(s * x, s * y)));
   shape.closePath();
 
-  // Clay body (the broken edge, a warm line under the glaze).
   ctx.fillStyle = 'rgba(206,178,138,0.98)';
   ctx.save();
   ctx.translate(s * 0.025, s * 0.055);
   ctx.fill(shape, 'evenodd');
   ctx.restore();
 
-  // Glaze surface.
   const raw = Math.max(0, 1 - maturity);
   const burnt = Math.max(0, maturity - 1);
   const g = ctx.createLinearGradient(-s, -s * 0.8, s * 0.8, s * 0.9);
@@ -277,8 +413,6 @@ export function drawShard(
 
   ctx.save();
   ctx.clip(shape, 'evenodd');
-
-  // Cobalt brush mark, following the surface.
   ctx.strokeStyle = `rgba(38,78,150,${0.35 + Math.min(0.5, maturity * 0.5)})`;
   ctx.lineWidth = s * 0.13;
   ctx.lineCap = 'round';
@@ -293,7 +427,6 @@ export function drawShard(
   ctx.bezierCurveTo(-s * 0.3, -s * 0.36, s * 0.25, s * 0.36, s * 0.78, -s * 0.26);
   ctx.stroke();
 
-  // Specular: the whole point of the shard. Raw glaze has none, ripe glaze is wet.
   const gloss = Math.max(0, Math.min(1, (maturity - 0.4) / 0.55));
   if (gloss > 0.02) {
     const lg = ctx.createLinearGradient(-s * 0.7, -s * 0.8, s * 0.1, s * 0.2);
@@ -310,7 +443,6 @@ export function drawShard(
     ctx.stroke();
   }
 
-  // Unmelted beads while the glaze is still raw.
   if (maturity < 0.88) {
     const beads = reduced ? 2 : 5;
     for (let i = 0; i < beads; i++) {
@@ -327,7 +459,6 @@ export function drawShard(
     }
   }
 
-  // Warm firelight from the lower left.
   const warm = ctx.createLinearGradient(-s, s * 0.6, -s * 0.2, -s * 0.2);
   warm.addColorStop(0, 'rgba(240,140,60,0.22)');
   warm.addColorStop(1, 'rgba(240,140,60,0)');
@@ -335,7 +466,6 @@ export function drawShard(
   ctx.fillRect(-s, -s, s * 2, s * 2);
   ctx.restore();
 
-  // Rim of the glaze where it broke.
   ctx.strokeStyle = 'rgba(255,255,255,0.45)';
   ctx.lineWidth = Math.max(1, s * 0.015);
   ctx.stroke(shape);

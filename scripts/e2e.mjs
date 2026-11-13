@@ -111,6 +111,8 @@ try {
   await page.click('.panel .btn-primary');
   await wait(250);
   s = await state();
+  const hintLoad = (await page.locator('.hint.show').textContent()) ?? '';
+  check('AC-15 a hint line guides the load step', hintLoad.trim().length > 4, hintLoad.trim().slice(0, 24));
   const slotCount = await page.locator('.slot').count();
   check('AC-2 twelve chambers', slotCount === 12, `found ${slotCount}`);
   check('AC-2 tray has five pieces', (await page.locator('.card').count()) === 5);
@@ -149,6 +151,8 @@ try {
   await wait(250);
   s = await state();
   check('AC-2 封窑 starts the fire', s.phase === 'fire');
+  const hintFire = (await page.locator('.hint.show').textContent()) ?? '';
+  check('AC-15 the hint changes with the phase', hintFire.includes('投柴') || hintFire.includes('火'), hintFire.trim().slice(0, 24));
 
   // Feeding raises the temperature.
   const before = (await state()).fire.temp;

@@ -1,6 +1,6 @@
 /** DOM shell: HUD, tray, buttons, cards. Canvas does the scenery only. */
 
-import { Game, type Phase } from '../game';
+import { Game, type HintTarget, type Phase } from '../game';
 import { NIGHTS } from '../sim/data';
 import { QUARTERS, QUARTER_SECONDS } from '../sim/fire';
 import { forecast, slotFactor, SLOTS, COL_NAMES } from '../sim/kiln';
@@ -46,6 +46,9 @@ export class App {
   private toastTimer = 0;
   private reduced = false;
   private last = 0;
+  private hintEl: HTMLElement;
+  private hintText = '';
+  private pulseEl: HTMLElement | null = null;
 
   constructor() {
     this.canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -61,6 +64,8 @@ export class App {
     this.hudCoins = document.getElementById('hud-coins') as HTMLElement;
 
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.hintEl = EL('div', 'hint');
+    this.overlay.appendChild(this.hintEl);
     this.scene = new Scene(this.reduced);
     this.layout = computeLayout(1, 1);
 
@@ -158,6 +163,7 @@ export class App {
     this.game.update(dt);
     this.scene.draw(this.ctx, this.game, this.layout, now, dt);
     this.syncHud();
+    this.syncHint();
     const sig = this.sig();
     if (sig !== this.signature) {
       this.signature = sig;
@@ -199,6 +205,44 @@ export class App {
     }
   }
 
+  /** One quiet line from the master, plus a breathing ring on the next control. */
+  private syncHint(): void {
+    const h = this.game.hint();
+    if (h.text !== this.hintText) {
+      this.hintText = h.text;
+      this.hintEl.textContent = h.text;
+      this.hintEl.classList.toggle('show', !!h.text);
+    }
+    const next = this.pickTarget(h.target);
+    if (next !== this.pulseEl) {
+      this.pulseEl?.classList.remove('hint-pulse');
+      this.pulseEl = next;
+      this.pulseEl?.classList.add('hint-pulse');
+    }
+  }
+
+  private pickTarget(t: HintTarget): HTMLElement | null {
+    if (!t) return null;
+    switch (t) {
+      case 'feed':
+        return document.getElementById('feed');
+      case 'shard':
+        return document.getElementById('shard');
+      case 'next':
+        return document.getElementById('next');
+      case 'vent':
+        return this.bar.querySelector('.vent');
+      case 'seal':
+        return [...this.bar.querySelectorAll('button')].find((b) => b.textContent?.trim() === '封窑') ?? null;
+      case 'tray':
+        return this.bar.querySelector('.card');
+      case 'slot':
+        return this.overlay.querySelector('.slot.can') ?? this.overlay.querySelector('.slot');
+      default:
+        return null;
+    }
+  }
+
   private toastSay(text: string): void {
     if (!this.toast) {
       this.toast = EL('div', 'toast');
@@ -222,8 +266,9 @@ export class App {
     const s = this.game.state;
     const keepToast = this.toast;
     [...this.overlay.children].forEach((c) => {
-      if (c !== keepToast) c.remove();
+      if (c !== keepToast && c !== this.hintEl) c.remove();
     });
+    this.overlay.appendChild(this.hintEl);
     this.bar.replaceChildren();
     this.slots = [];
 
@@ -424,21 +469,10 @@ export class App {
 
   private buildFire(): void {
     const s = this.game.state;
-    this.overlay.appendChild(
-      (() => {
-        const h = EL('div', 'bar-hint');
-        h.style.position = 'absolute';
-        h.style.left = '22px';
-        h.style.top = '14px';
-        h.style.fontSize = '13px';
-        h.textContent = '投柴看火色；火照子只有三片。';
-        return h;
-      })(),
-    );
-
     // Bottom bar: feed, vents, shard.
-    const feed = EL('button', 'btn btn-fire', '投柴');
+    const feed = EL('button', 'btn btn-fire');
     feed.id = 'feed';
+    feed.innerHTML = '<span class="feed-label">投柴</span><span class="feed-hold">按住</span>';
     const down = (e: PointerEvent) => {
       e.preventDefault();
       this.game.feed(true);

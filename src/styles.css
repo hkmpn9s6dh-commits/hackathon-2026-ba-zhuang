@@ -373,13 +373,14 @@ button:focus-visible,
 .slot .tip {
   position: absolute;
   left: 50%;
-  bottom: 9px;
+  bottom: 10px;
   transform: translateX(-50%);
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   white-space: nowrap;
   display: none;
   color: var(--porcelain-dim);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 .slot[data-verdict] .dot,
@@ -861,4 +862,79 @@ button:focus-visible,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* ── the master's line ───────────────────────────────── */
+
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(6px);
+  max-width: min(720px, 76vw);
+  text-align: center;
+  font-family: 'Songti SC', 'SimSun', serif;
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  line-height: 1.6;
+  color: rgba(243, 239, 228, 0.82);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
+  pointer-events: none;
+}
+
+.hint.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.hint::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fire);
+  margin-right: 10px;
+  vertical-align: 2px;
+  box-shadow: 0 0 10px rgba(226, 87, 31, 0.9);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(226, 120, 60, 0);
+    border-color: rgba(226, 120, 60, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(226, 120, 60, 0.22);
+    border-color: rgba(255, 176, 110, 0.95);
+  }
+}
+
+.hint-pulse {
+  animation: breathe 2.4s ease-in-out infinite !important;
+}
+
+.btn-fire {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.feed-label {
+  font-size: 21px;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+}
+
+.feed-hold {
+  font-family: 'Microsoft YaHei', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: rgba(255, 217, 176, 0.6);
 }

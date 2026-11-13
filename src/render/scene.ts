@@ -4,7 +4,7 @@ import type { Game, Phase } from '../game';
 import { QUARTERS, QUARTER_SECONDS, targetAt } from '../sim/fire';
 import { ROWS, SLOTS, slotFactor } from '../sim/kiln';
 import type { WareDef } from '../sim/types';
-import { drawWare } from './porcelain';
+import { drawWare, fitWare } from './porcelain';
 
 export interface Rect {
   x: number;
@@ -142,6 +142,8 @@ export class Scene {
   private stars: { x: number; y: number; r: number; p: number }[] = [];
   private reduced = false;
   private acc = 0;
+  private grainArt: HTMLCanvasElement | null = null;
+  private grainPattern: CanvasPattern | null = null;
 
   constructor(reduced = false) {
     this.reduced = reduced;
@@ -181,6 +183,7 @@ export class Scene {
     if (zoom) ctx.restore();
     this.updateParticles(l, heat, phase, dt);
     this.drawParticles(ctx);
+    this.grain(ctx, l);
     if (l.chart && phase !== 'title') this.chart(ctx, l, game, now);
     this.vignette(ctx, l);
   }
@@ -320,18 +323,25 @@ export class Scene {
       ctx.translate(x, y);
       ctx.rotate(a);
       const g = ctx.createLinearGradient(0, -rad, 0, rad);
-      g.addColorStop(0, '#4a3624');
-      g.addColorStop(0.45, '#3a2a1b');
-      g.addColorStop(1, '#1d140d');
+      g.addColorStop(0, '#2e2116');
+      g.addColorStop(0.35, '#4a3524');
+      g.addColorStop(0.7, '#302216');
+      g.addColorStop(1, '#14100b');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.roundRect(-len / 2, -rad, len, rad * 2, rad);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(150,118,80,0.22)';
-      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(168,132,88,0.5)';
       ctx.beginPath();
       ctx.ellipse(len / 2 - 1, 0, rad * 0.42, rad * 0.82, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(96,68,42,0.7)';
+      ctx.lineWidth = 0.9;
+      for (let ring = 1; ring <= 2; ring++) {
+        ctx.beginPath();
+        ctx.ellipse(len / 2 - 1, 0, rad * 0.42 * (ring / 3), rad * 0.82 * (ring / 3), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     };
 
@@ -349,6 +359,44 @@ export class Scene {
   }
 
   // ── the kiln ────────────────────────────────────────────
+
+  /** A real masonry field: staggered courses, per-brick tint, dark mortar. */
+  private bricks(
+    ctx: CanvasRenderingContext2D,
+    x0: number,
+    x1: number,
+    y0: number,
+    y1: number,
+    rowH: number,
+    lit: boolean,
+  ): void {
+    const brickW = rowH * 2.15;
+    let row = 0;
+    for (let y = y0; y < y1; y += rowH) {
+      const off = row % 2 === 0 ? 0 : brickW * 0.5;
+      for (let x = x0 - brickW; x < x1 + brickW; x += brickW) {
+        // Deterministic tint so the wall does not shimmer between frames.
+        const h = Math.sin((x * 12.9898 + y * 78.233) * 0.5) * 43758.5453;
+        const v = h - Math.floor(h);
+        const g = v * 0.5 + 0.25 * (((row % 3) / 3) + 0.3);
+        const rC = Math.round((lit ? 62 : 34) * g + 12);
+        const gC = Math.round((lit ? 40 : 21) * g + 7);
+        const bC = Math.round((lit ? 28 : 14) * g + 4);
+        ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
+        ctx.fillRect(x + off + 0.8, y + 0.8, brickW - 1.6, rowH - 1.6);
+      }
+      row++;
+    }
+    // Mortar: one dark line per course.
+    ctx.strokeStyle = 'rgba(8,5,3,0.5)';
+    ctx.lineWidth = 1.2;
+    for (let y = y0; y < y1; y += rowH) {
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+    }
+  }
 
   private kiln(
     ctx: CanvasRenderingContext2D,
@@ -386,30 +434,15 @@ export class Scene {
     ctx.closePath();
     const litBody = phase === 'title';
     const body = ctx.createLinearGradient(left, top, right, base);
-    body.addColorStop(0, litBody ? '#4a3122' : '#2c1e15');
-    body.addColorStop(0.45, litBody ? '#3a2718' : '#241811');
-    body.addColorStop(1, litBody ? '#241610' : '#150e09');
+    body.addColorStop(0, litBody ? '#3a2417' : '#1a110b');
+    body.addColorStop(0.45, litBody ? '#2b1b12' : '#150d09');
+    body.addColorStop(1, litBody ? '#1a100b' : '#0c0705');
     ctx.fillStyle = body;
     ctx.fill();
 
     ctx.save();
     ctx.clip();
-    const rowH = Math.max(7, l.cell * 0.095);
-    ctx.strokeStyle = 'rgba(255,175,110,0.05)';
-    ctx.lineWidth = 1;
-    for (let y = top; y < base; y += rowH) {
-      ctx.beginPath();
-      ctx.moveTo(left - 30, y);
-      ctx.lineTo(right + 30, y);
-      ctx.stroke();
-      const off = (Math.round(y / rowH) % 2) * rowH;
-      for (let x = left - 30 + off; x < right + 30; x += rowH * 2.2) {
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y + rowH);
-        ctx.stroke();
-      }
-    }
+    this.bricks(ctx, left - 30, right + 30, top - 10, base, Math.max(6, l.cell * 0.085), phase === 'title');
     const lit = ctx.createRadialGradient(
       l.fire.x + l.fire.w * 0.5,
       l.fire.y,
@@ -441,18 +474,19 @@ export class Scene {
     // Chimney at the rear.
     const ch = l.chimney;
     const chBottom = top + l.cell * 0.5;
-    ctx.fillStyle = '#1c130e';
-    ctx.fillRect(ch.x, ch.y, ch.w, chBottom - ch.y);
-    ctx.strokeStyle = 'rgba(255,175,110,0.07)';
-    for (let y = ch.y; y < chBottom; y += rowH) {
-      ctx.beginPath();
-      ctx.moveTo(ch.x, y);
-      ctx.lineTo(ch.x + ch.w, y);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#251a12';
-    const capW = ch.w * 1.3;
-    ctx.fillRect(ch.x - (capW - ch.w) / 2, ch.y - 7, capW, 8);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ch.x, ch.y, ch.w, chBottom - ch.y);
+    ctx.clip();
+    this.bricks(ctx, ch.x, ch.x + ch.w, ch.y - 10, chBottom, Math.max(5, l.cell * 0.07), false);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(ch.x, ch.y, ch.w * 0.22, chBottom - ch.y);
+    ctx.fillStyle = '#2b1d13';
+    const capW = ch.w * 1.35;
+    ctx.fillRect(ch.x - (capW - ch.w) / 2, ch.y - 8, capW, 9);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(ch.x - (capW - ch.w) / 2, ch.y - 8, capW, 2);
 
     const shut = phase === 'title' || phase === 'brief';
     if (shut) this.facade(ctx, l, heat);
@@ -492,11 +526,18 @@ export class Scene {
       ctx.save();
       fpath();
       ctx.clip();
-      ctx.fillStyle = 'rgba(26,21,18,0.9)';
+      // Iron plate, heating from the bottom up.
+      const plate = ctx.createLinearGradient(0, f.y, 0, f.y + f.h);
+      plate.addColorStop(0, 'rgba(18,15,13,0.96)');
+      plate.addColorStop(0.55, `rgba(${28 + heat * 60},${16 + heat * 20},${12 + heat * 8},0.96)`);
+      plate.addColorStop(1, fireColor(heat * 0.9, 0.6));
+      ctx.fillStyle = plate;
       ctx.fillRect(f.x - 2, f.y - 2, f.w + 4, f.h + 4);
+
       const flick = 0.5 + 0.5 * Math.sin(now * 0.005);
-      ctx.strokeStyle = fireColor(heat, 0.3 + flick * 0.35);
-      ctx.lineWidth = 1.3;
+      // Seams leak light.
+      ctx.strokeStyle = fireColor(heat, 0.45 + flick * 0.45);
+      ctx.lineWidth = 1.6;
       for (let i = 1; i < 4; i++) {
         ctx.beginPath();
         ctx.moveTo(f.x + (f.w * i) / 4, f.y);
@@ -507,6 +548,20 @@ export class Scene {
       ctx.moveTo(f.x, f.y + f.h * 0.64);
       ctx.lineTo(f.x + f.w, f.y + f.h * 0.64);
       ctx.stroke();
+
+      // Glow bleeding around the edges of the plate.
+      const leak = ctx.createRadialGradient(
+        f.x + f.w / 2,
+        f.y + f.h * 0.7,
+        f.w * 0.2,
+        f.x + f.w / 2,
+        f.y + f.h * 0.7,
+        f.w * 1.1,
+      );
+      leak.addColorStop(0, fireColor(heat, 0.28));
+      leak.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = leak;
+      ctx.fillRect(f.x - 4, f.y - 4, f.w + 8, f.h + 8);
       ctx.restore();
     }
 
@@ -680,24 +735,38 @@ export class Scene {
       ctx.save();
       niche();
       const ng = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
-      ng.addColorStop(0, 'rgba(10,7,5,0.96)');
-      ng.addColorStop(0.6, `rgba(24,13,8,${0.92 * fade})`);
-      ng.addColorStop(1, fireColor(glow, 0.2 * fade + 0.03));
+      ng.addColorStop(0, 'rgba(4,3,2,0.98)');
+      ng.addColorStop(0.55, `rgba(14,8,5,${0.96 * fade})`);
+      ng.addColorStop(1, fireColor(glow, 0.42 * fade + 0.02));
       ctx.fillStyle = ng;
       ctx.fill();
       ctx.restore();
 
       ctx.save();
       niche();
-      ctx.strokeStyle = `rgba(124,88,58,${0.45 * fade})`;
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = `rgba(96,64,42,${0.5 * fade})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(226,140,70,${0.16 * fade + glow * 0.14})`;
+      ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = `rgba(62,40,27,${0.92 * fade})`;
-      ctx.fillRect(r.x + 1, r.y + r.h - r.h * 0.09, r.w - 2, r.h * 0.075);
-      ctx.fillStyle = fireColor(glow, 0.18 * fade);
-      ctx.fillRect(r.x + 1, r.y + r.h - r.h * 0.09, r.w - 2, 1.4);
+      // Inner shadow at the top of the chamber, so the niche has depth.
+      const shade = ctx.createLinearGradient(0, r.y, 0, r.y + r.h * 0.5);
+      shade.addColorStop(0, `rgba(0,0,0,${0.6 * fade})`);
+      shade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shade;
+      ctx.fillRect(r.x + 1, r.y, r.w - 2, r.h * 0.5);
+
+      // Floor: a firebrick ledge with its own thickness.
+      const ledgeY = r.y + r.h - r.h * 0.095;
+      ctx.fillStyle = `rgba(74,46,30,${0.95 * fade})`;
+      ctx.fillRect(r.x, ledgeY, r.w, r.h * 0.08);
+      ctx.fillStyle = `rgba(28,17,11,${0.9 * fade})`;
+      ctx.fillRect(r.x, ledgeY + r.h * 0.08, r.w, r.h * 0.018);
+      ctx.fillStyle = fireColor(glow, 0.32 * fade);
+      ctx.fillRect(r.x, ledgeY, r.w, 1.6);
 
       const uid = s.slots[i];
       if (uid !== null) {
@@ -706,125 +775,143 @@ export class Scene {
           const idx = s.pieces.findIndex((p) => p.slot === i);
           const shown = s.phase === 'open' && idx >= 0 && idx < s.revealed;
           const piece = idx >= 0 ? s.pieces[idx] : null;
-          drawWare(ctx, ware.def, r.x + r.w / 2, r.y + r.h * 0.9, r.w * 0.5, {
+          drawWare(ctx, ware.def, r.x + r.w / 2, r.y + r.h * 0.9, fitWare(ware.def.id, r.w * 0.84, r.h * 0.62), {
             heat: glow * 0.5,
             over: shown && piece?.verdict === 'over',
             cracked: shown && piece?.verdict === 'cracked',
             flambe: shown && piece?.verdict === 'flambe',
             droop: shown && piece?.verdict === 'over' ? 1 : 0,
-            dim: 0.34 + glow * 0.2,
+            dim: 0.34 + glow * 0.55,
+            seed: uid,
           });
         }
       } else {
-        ctx.strokeStyle = `rgba(150,112,78,${0.2 * fade})`;
+        // An empty place: a low saggar ring on the ledge, nothing more.
+        const cx0 = r.x + r.w / 2;
+        const ry0 = r.w * 0.17;
+        const ringY = r.y + r.h * 0.885;
+        ctx.fillStyle = `rgba(52,33,22,${0.85 * fade})`;
+        ctx.beginPath();
+        ctx.ellipse(cx0, ringY, ry0, ry0 * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(138,98,66,${0.3 * fade})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.ellipse(r.x + r.w / 2, r.y + r.h * 0.85, r.w * 0.19, r.w * 0.05, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx0, ringY - ry0 * 0.12, ry0, ry0 * 0.34, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
   }
 
-  /** The 把桩 himself, a silhouette by the door, hook in hand. */
+  /** The 把桩 himself, a silhouette beside the door, hook in hand. */
   private master(ctx: CanvasRenderingContext2D, l: Layout, game: Game, now: number): void {
     const phase = game.state.phase;
     const f = l.fire;
     const title = phase === 'title';
-    const h = l.cell * (title ? 2.5 : 1.55);
-    const x = f.x - l.cell * (title ? 0.8 : 0.5);
+    const h = l.cell * (title ? 2.4 : 1.45);
+    const x = f.x - l.cell * (title ? 1.0 : 0.74);
     const g0 = l.groundY;
-    const sway = Math.sin(now * 0.0008) * l.cell * 0.005;
+    const sway = Math.sin(now * 0.0008) * l.cell * 0.004;
     const u = h / 100;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
-    ctx.ellipse(x + u * 4, g0, u * 20, u * 3.4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + u * 3, g0, u * 17, u * 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const ink = ctx.createLinearGradient(x - u * 20, 0, x + u * 18, 0);
+    const ink = ctx.createLinearGradient(x - u * 18, 0, x + u * 16, 0);
     ink.addColorStop(0, '#04070b');
-    ink.addColorStop(0.62, '#070b11');
-    ink.addColorStop(1, '#1a120c');
+    ink.addColorStop(0.58, '#080c12');
+    ink.addColorStop(1, '#241610');
     ctx.fillStyle = ink;
     ctx.lineCap = 'round';
 
-    // Legs, with a gap so it reads as a man and not a post.
+    // Legs (visible below the coat).
     ctx.beginPath();
-    ctx.moveTo(x - u * 8, g0);
-    ctx.lineTo(x - u * 5.5, g0 - u * 34);
-    ctx.lineTo(x - u * 1, g0 - u * 34);
-    ctx.lineTo(x - u * 1, g0);
+    ctx.moveTo(x - u * 7.4, g0);
+    ctx.lineTo(x - u * 5.4, g0 - u * 46);
+    ctx.lineTo(x - u * 1.6, g0 - u * 46);
+    ctx.lineTo(x - u * 1.4, g0);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(x + u * 2, g0);
-    ctx.lineTo(x + u * 2, g0 - u * 34);
-    ctx.lineTo(x + u * 6.5, g0 - u * 34);
-    ctx.lineTo(x + u * 9, g0);
+    ctx.moveTo(x + u * 1.8, g0);
+    ctx.lineTo(x + u * 1.8, g0 - u * 46);
+    ctx.lineTo(x + u * 5.6, g0 - u * 46);
+    ctx.lineTo(x + u * 8, g0);
     ctx.closePath();
     ctx.fill();
 
-    // Long coat, narrower at the shoulders.
+    // Long coat, hem at the knee.
     ctx.beginPath();
-    ctx.moveTo(x - u * 11 + sway, g0 - u * 30);
-    ctx.quadraticCurveTo(x - u * 10 + sway, g0 - u * 56, x - u * 8.5 + sway, g0 - u * 70);
-    ctx.quadraticCurveTo(x - u * 4 + sway, g0 - u * 78, x + u * 4 + sway, g0 - u * 78);
-    ctx.quadraticCurveTo(x + u * 8.5 + sway, g0 - u * 70, x + u * 10, g0 - u * 54);
-    ctx.quadraticCurveTo(x + u * 11, g0 - u * 46, x + u * 9, g0 - u * 30);
+    ctx.moveTo(x - u * 10.6 + sway, g0 - u * 42);
+    ctx.quadraticCurveTo(x - u * 9.6 + sway, g0 - u * 58, x - u * 8.2 + sway, g0 - u * 70);
+    ctx.quadraticCurveTo(x - u * 4 + sway, g0 - u * 77, x + u * 4 + sway, g0 - u * 77);
+    ctx.quadraticCurveTo(x + u * 8.2 + sway, g0 - u * 70, x + u * 8.8, g0 - u * 58);
+    ctx.quadraticCurveTo(x + u * 9.4, g0 - u * 50, x + u * 8.6, g0 - u * 42);
     ctx.closePath();
     ctx.fill();
+
+    // Sash.
+    ctx.strokeStyle = 'rgba(120,80,52,0.35)';
+    ctx.lineWidth = u * 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x - u * 8.4 + sway, g0 - u * 54);
+    ctx.lineTo(x + u * 8.2, g0 - u * 52);
+    ctx.stroke();
 
     // Head and neck.
+    ctx.fillStyle = ink;
     ctx.beginPath();
-    ctx.arc(x + sway * 0.4, g0 - u * 84, u * 5.4, 0, Math.PI * 2);
+    ctx.arc(x + sway * 0.4, g0 - u * 82, u * 5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(x + sway * 0.4 - u * 1.9, g0 - u * 80, u * 3.8, u * 5);
+    ctx.fillRect(x + sway * 0.4 - u * 1.8, g0 - u * 79, u * 3.6, u * 5);
 
-    // 斗笠: a wide low cone.
+    // 斗笠.
     ctx.beginPath();
-    ctx.moveTo(x - u * 13 + sway * 0.4, g0 - u * 87);
-    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 101, x + u * 13 + sway * 0.4, g0 - u * 87);
+    ctx.moveTo(x - u * 10.5 + sway * 0.4, g0 - u * 85);
+    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 96, x + u * 10.5 + sway * 0.4, g0 - u * 85);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(230,132,66,0.42)';
-    ctx.lineWidth = Math.max(1, u * 0.9);
+    ctx.strokeStyle = 'rgba(232,132,62,0.45)';
+    ctx.lineWidth = Math.max(1, u * 0.8);
     ctx.beginPath();
-    ctx.moveTo(x - u * 13 + sway * 0.4, g0 - u * 87);
-    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 101, x + u * 13 + sway * 0.4, g0 - u * 87);
+    ctx.moveTo(x - u * 10.5 + sway * 0.4, g0 - u * 85);
+    ctx.quadraticCurveTo(x + sway * 0.4, g0 - u * 96, x + u * 10.5 + sway * 0.4, g0 - u * 85);
     ctx.stroke();
 
-    // The near arm, and the hook resting toward the stoke hole.
-    const handX = x + u * 16;
+    // Near arm and the hook resting toward the stoke hole.
+    const handX = x + u * 13;
     const handY = g0 - u * 55;
     ctx.strokeStyle = '#04070b';
-    ctx.lineWidth = u * 5.2;
+    ctx.lineWidth = u * 4.6;
     ctx.beginPath();
-    ctx.moveTo(x + u * 7 + sway, g0 - u * 72);
-    ctx.quadraticCurveTo(x + u * 14, g0 - u * 66, handX, handY);
+    ctx.moveTo(x + u * 6 + sway, g0 - u * 71);
+    ctx.quadraticCurveTo(x + u * 11.5, g0 - u * 66, handX, handY);
     ctx.stroke();
 
-    const hx = f.x + f.w + l.cell * 0.2;
-    const hy = f.y + f.h * 0.5;
-    ctx.strokeStyle = 'rgba(10,7,5,0.96)';
-    ctx.lineWidth = Math.max(1.6, u * 1.5);
+    const hx = f.x + f.w + l.cell * 0.11;
+    const hy = f.y + f.h * 0.52;
+    ctx.strokeStyle = 'rgba(12,8,6,0.96)';
+    ctx.lineWidth = Math.max(1.5, u * 1.3);
     ctx.beginPath();
     ctx.moveTo(handX, handY);
-    ctx.lineTo(hx - l.cell * 0.03, hy + l.cell * 0.1);
+    ctx.lineTo(hx, hy);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(220,160,100,0.3)';
-    ctx.lineWidth = Math.max(0.8, u * 0.7);
+    ctx.strokeStyle = 'rgba(226,160,100,0.34)';
+    ctx.lineWidth = Math.max(0.7, u * 0.6);
     ctx.stroke();
 
-    // Rim light along the side that faces the fire.
-    ctx.strokeStyle = 'rgba(232,132,62,0.55)';
+    // Rim light on the fire side.
+    ctx.strokeStyle = 'rgba(236,138,66,0.6)';
     ctx.lineWidth = Math.max(1, u * 1.1);
     ctx.beginPath();
-    ctx.moveTo(x + u * 8.5 + sway, g0 - u * 70);
-    ctx.quadraticCurveTo(x + u * 10, g0 - u * 54, x + u * 9, g0 - u * 30);
+    ctx.moveTo(x + u * 8.4 + sway, g0 - u * 70);
+    ctx.quadraticCurveTo(x + u * 9.6, g0 - u * 56, x + u * 8.8, g0 - u * 42);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x + sway * 0.4, g0 - u * 84, u * 5.4, -1.0, 0.8);
+    ctx.arc(x + sway * 0.4, g0 - u * 82, u * 5, -1.05, 0.75);
     ctx.stroke();
     ctx.restore();
   }
@@ -981,8 +1068,23 @@ export class Scene {
       ctx.stroke();
     }
 
-    ctx.strokeStyle = 'rgba(236,230,214,0.38)';
-    ctx.lineWidth = 1.6;
+    // The corridor the fire is supposed to stay inside.
+    ctx.beginPath();
+    for (let i = 0; i <= 72; i++) {
+      const t = (i / 72) * total;
+      const x = x0 + ((x1 - x0) * i) / 72;
+      const y = yOf(targetAt(game.nightDef.curve, t));
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x0, y1);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(226,120,60,0.07)';
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(236,230,214,0.42)';
+    ctx.lineWidth = 1.4;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
     for (let i = 0; i <= 72; i++) {
@@ -1033,11 +1135,56 @@ export class Scene {
       ctx.fill();
     }
 
+    // Current position: a hairline so the eye can read “where am I now”.
+    if (s.phase === 'fire') {
+      const nx = x0 + ((x1 - x0) * Math.min(s.fire.t, total)) / total;
+      ctx.strokeStyle = 'rgba(255,214,150,0.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(nx, y0);
+      ctx.lineTo(nx, y1);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = 'rgba(243,239,228,0.3)';
     ctx.font = `${compact ? 10 : 11}px "Microsoft YaHei", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText('熟', c.x + 7, yOf(0.94) + 4);
     ctx.fillText('生', c.x + 7, yOf(0.08) + 4);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(243,239,228,0.22)';
+    ['子', '卯', '午', '酉', '子'].forEach((t, i) => {
+      ctx.fillText(t, x0 + ((x1 - x0) * i) / 4, y1 + (compact ? 10 : 13));
+    });
+    ctx.restore();
+  }
+
+  /** A little film grain: the cheapest way to stop vector shapes looking like vector shapes. */
+  private grain(ctx: CanvasRenderingContext2D, l: Layout): void {
+    if (!this.grainArt) {
+      const size = 160;
+      const c = document.createElement('canvas');
+      c.width = size;
+      c.height = size;
+      const g = c.getContext('2d');
+      if (!g) return;
+      const img = g.createImageData(size, size);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = 120 + Math.random() * 70;
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 26;
+      }
+      g.putImageData(img, 0, 0);
+      this.grainArt = c;
+      this.grainPattern = ctx.createPattern(c, 'repeat');
+    }
+    if (!this.grainPattern) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = this.grainPattern;
+    ctx.fillRect(0, 0, l.w, l.h);
     ctx.restore();
   }
 
@@ -1071,7 +1218,7 @@ export function paintWareThumb(
   canvas.height = Math.round(h * dpr);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, h);
-  drawWare(c, def, w / 2, h * 0.92, h * 0.66, paint);
+  drawWare(c, def, w / 2, h * 0.9, fitWare(def.id, w * 0.9, h * 0.76), paint);
 }
 
 export function ambientHeat(game: Game): number {

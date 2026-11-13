@@ -18,6 +18,8 @@ import type { Choice, EventDef, Piece, Ware } from './sim/types';
 
 export type Phase = 'title' | 'brief' | 'load' | 'fire' | 'open' | 'settle' | 'end';
 
+export type HintTarget = 'tray' | 'slot' | 'seal' | 'feed' | 'vent' | 'shard' | 'next' | null;
+
 export interface ActiveEvent {
   def: EventDef;
   at: number;
@@ -329,6 +331,55 @@ export class Game {
       if (best >= 0) this.state.slots[best] = w.uid;
     }
     this.state.selected = null;
+  }
+
+  /**
+   * The master's next line. Weak, diegetic guidance: one sentence, never a modal.
+   * `target` names the control the eye should be on.
+   */
+  hint(): { text: string; target: HintTarget } {
+    const s = this.state;
+    const n = this.nightDef;
+    switch (s.phase) {
+      case 'title':
+        return { text: '', target: null };
+      case 'brief':
+        return { text: '这一窑要烧什么，先看一眼；点「入窑」进去。', target: 'next' };
+      case 'load': {
+        const placed = this.filled();
+        if (s.selected !== null) {
+          return { text: '窑头最热、窑尾最凉。把它放进写着「合适」的那一格。', target: 'slot' };
+        }
+        if (placed === 0) {
+          return { text: '先点托盘里的一件器，再点一个窑位。', target: 'tray' };
+        }
+        if (placed < s.wares.length) {
+          return { text: `还有 ${s.wares.length - placed} 件没入窑；不想放了就直接「封窑」。`, target: 'seal' };
+        }
+        return { text: '窑满了，点「封窑」点火。', target: 'seal' };
+      }
+      case 'fire': {
+        const f = s.fire;
+        if (s.event) return { text: '', target: null };
+        if (s.shard) return { text: '', target: null };
+        if (f.t < 2.5) return { text: '按住「投柴」，火才起得来。', target: 'feed' };
+        const off = f.temp - this.target;
+        if (off < -0.07) return { text: '火头低了：投柴，或者把火眼开大一档。', target: 'feed' };
+        if (off > 0.07) return { text: '火头高了：松开柴，把火眼收小一档。', target: 'vent' };
+        if (f.t > DURATION * 0.5 && s.shards > 0) {
+          return { text: '火候差不多了，拉一片火照子看看釉到没到。', target: 'shard' };
+        }
+        if (f.t > DURATION * 0.88) return { text: '快落窑了，稳住火路，别贪最后一把柴。', target: null };
+        return { text: '跟着左侧的火路走：低了加柴，高了收火。', target: null };
+      }
+      case 'open':
+        return { text: '点「出下一件」，看这一窑的成色。', target: 'next' };
+      case 'settle':
+        return { text: s.night >= 2 ? '点「看结局」。' : '点「下一夜」。', target: 'next' };
+      default:
+        return { text: '', target: null };
+    }
+    void n;
   }
 
   get target(): number {

@@ -1,0 +1,20 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import path from 'node:path';
+const exe = ['AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe', 'AppData/Local/ms-playwright/chromium-1200/chrome-win64/chrome.exe']
+  .map((x) => path.join(homedir(), x)).find(existsSync);
+const srv = spawn('python', ['-m', 'http.server', '4319', '--bind', '127.0.0.1', '--directory', 'dist'], { stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 1200));
+const b = await chromium.launch({ executablePath: exe, headless: true });
+const p = await b.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 3 });
+await p.goto('http://127.0.0.1:4319/');
+await p.waitForTimeout(700);
+await p.click('.title-actions .btn-primary');
+await p.waitForTimeout(300);
+await p.click('.panel .btn-primary');
+await p.waitForTimeout(500);
+await p.locator('.card').first().screenshot({ path: 'proof/shots/zoom-card.png' });
+await p.screenshot({ path: 'proof/shots/zoom-load.png', clip: { x: 560, y: 90, width: 340, height: 260 } });
+await b.close(); srv.kill();

@@ -578,12 +578,24 @@ export class Scene {
     // The stoke hole beside the door, where the shard comes out.
     const sx = f.x + f.w + l.cell * 0.2;
     const sy = f.y + f.h * 0.5;
+    const sr = Math.max(3.5, l.cell * 0.052);
+    // A firebrick ring, then the dark hole, then an ember at the bottom of it.
+    ctx.fillStyle = '#3c2417';
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr * 1.55, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#0a0604';
     ctx.beginPath();
-    ctx.arc(sx, sy, Math.max(3, l.cell * 0.05), 0, Math.PI * 2);
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = fireColor(heat, 0.5);
+    ctx.fillStyle = fireColor(heat * 0.9, 0.5);
+    ctx.beginPath();
+    ctx.arc(sx, sy + sr * 0.25, sr * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(196,140,90,0.35)';
     ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr * 1.55, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -891,8 +903,8 @@ export class Scene {
     ctx.quadraticCurveTo(x + u * 11.5, g0 - u * 66, handX, handY);
     ctx.stroke();
 
-    const hx = f.x + f.w + l.cell * 0.11;
-    const hy = f.y + f.h * 0.52;
+    const hx = f.x - l.cell * 0.04;
+    const hy = f.y + f.h * 0.62;
     ctx.strokeStyle = 'rgba(12,8,6,0.96)';
     ctx.lineWidth = Math.max(1.5, u * 1.3);
     ctx.beginPath();

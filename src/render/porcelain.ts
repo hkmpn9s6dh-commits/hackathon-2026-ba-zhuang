@@ -19,7 +19,7 @@ export function shapeOf(id: string): WareShape {
 /** Height that keeps a piece inside a box of maxW × maxH. */
 export function fitWare(id: string, maxW: number, maxH: number): number {
   const shape = shapeOf(id);
-  const ratio = shape === 'vase' ? 0.56 : shape === 'jar' ? 0.86 : 1.38;
+  const ratio = shape === 'vase' ? 0.62 : shape === 'jar' ? 0.86 : 1.38;
   return Math.min(maxH, maxW / ratio);
 }
 
@@ -82,11 +82,13 @@ function halfProfile(shape: WareShape, w: number, t: number): number {
     return (w / 2) * (r + flare);
   }
   if (shape === 'jar') return (w / 2) * Math.pow(Math.max(0, Math.sin(Math.PI * (0.18 + 0.68 * t))), 0.46);
+  // t = 0 is the mouth, t = 1 is the foot.
   const belly = w / 2;
-  if (t < 0.14) return belly * (0.36 + (0.64 * t) / 0.14);
-  if (t < 0.5) return belly * (1 - 0.04 * Math.sin(((t - 0.14) / 0.36) * Math.PI));
-  if (t < 0.78) return belly * (0.96 - (0.8 * (t - 0.5)) / 0.28);
-  return belly * (0.16 + (0.12 * (t - 0.78)) / 0.22);
+  if (t < 0.08) return belly * (0.3 + (0.0 * t) / 0.08);
+  if (t < 0.2) return belly * (0.3 - (0.14 * (t - 0.08)) / 0.12);
+  if (t < 0.44) return belly * (0.16 + (0.84 * Math.sin(((t - 0.2) / 0.24) * Math.PI * 0.5)));
+  if (t < 0.8) return belly * (1 - (0.62 * (t - 0.44)) / 0.36);
+  return belly * (0.38 - (0.06 * (t - 0.8)) / 0.2);
 }
 
 function bodyPath(ctx: CanvasRenderingContext2D, shape: WareShape, w: number, h: number): void {
@@ -192,7 +194,7 @@ export function drawWare(
   paint: WarePaint = {},
 ): void {
   const shape = shapeOf(def.id);
-  const ratio = shape === 'vase' ? 0.56 : shape === 'jar' ? 0.86 : 1.38;
+  const ratio = shape === 'vase' ? 0.62 : shape === 'jar' ? 0.86 : 1.38;
   const w = height * ratio;
   const h = height;
   const g = GLAZE[def.kind] ?? GLAZE.yingqing;

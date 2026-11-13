@@ -46,6 +46,10 @@ export interface GameState {
   revealed: number[];
   /** Where the fire stood each time a shard came out. */
   shardMarks: { t: number; verdict: Shard['verdict'] }[];
+  /** The fire's own history, sampled a few times a second. */
+  trace: { t: number; v: number }[];
+  /** Everything this player has ever fired, for the 瓷谱. */
+  collected: Record<string, { count: number; best: string }>;
   settlement: Settlement | null;
   coins: number;
   rep: number;
@@ -78,6 +82,8 @@ export class Game {
       pieces: [],
       revealed: [],
       shardMarks: [],
+      trace: [],
+      collected: {},
       settlement: null,
       coins: 0,
       rep: 0,
@@ -118,6 +124,7 @@ export class Game {
     this.state.pieces = [];
     this.state.revealed = [];
     this.state.shardMarks = [];
+    this.state.trace = [];
     this.state.settlement = null;
     this.state.shards = 3;
     this.state.shard = null;
@@ -241,6 +248,9 @@ export class Game {
 
     stepFire(s.fire, step, n.curve);
 
+    const last = s.trace[s.trace.length - 1];
+    if (!last || s.fire.t - last.t >= 0.4) s.trace.push({ t: s.fire.t, v: s.fire.temp });
+
     const q = Math.floor(s.fire.t / QUARTER_SECONDS) + 1;
     if (q !== s.lastQuarter && s.fire.t < DURATION) {
       s.lastQuarter = Math.min(QUARTERS, q);
@@ -309,6 +319,13 @@ export class Game {
 
   private toSettle(): void {
     const s = this.state;
+    const rank = ['over', 'under', 'cracked', 'good', 'excellent', 'flambe'];
+    for (const p of s.pieces) {
+      const id = p.ware.def.id;
+      const prev = s.collected[id];
+      const best = prev && rank.indexOf(prev.best) > rank.indexOf(p.verdict) ? prev.best : p.verdict;
+      s.collected[id] = { count: (prev?.count ?? 0) + 1, best };
+    }
     const firing = { peak: s.peak, stress: s.fire.stress, shock: s.fire.shock, inBand: s.fire.inBand, duration: s.fire.t };
     s.settlement = settle(this.nightDef, s.pieces, firing);
     s.coins += s.settlement.coins;

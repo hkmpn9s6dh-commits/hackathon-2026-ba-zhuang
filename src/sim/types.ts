@@ -22,6 +22,8 @@ export interface WareDef {
   overNote: string;
   /** One line when it is underfired. */
   underNote: string;
+  /** A line for the 瓷谱: what this ware is, in the real craft. */
+  culture: string;
 }
 
 export interface Ware {

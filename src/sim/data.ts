@@ -5,6 +5,7 @@ import type { EventDef, NightDef, Order, WareDef } from './types';
 export const WARES: Record<string, WareDef> = {
   'yingqing-bowl': {
     id: 'yingqing-bowl',
+    culture: '影青是景德镇宋代湖田窑的名品：釉色介于青白之间，刻花处积釉显青，薄处见光。',
     kind: 'yingqing',
     name: '影青刻花碗',
     mid: 0.5,
@@ -17,6 +18,7 @@ export const WARES: Record<string, WareDef> = {
   },
   'qinghua-bowl': {
     id: 'qinghua-bowl',
+    culture: '青花是「釉下彩」：钴料在胎上作画，罩透明釉，一次高温烧成，色沉在釉里不褪。',
     kind: 'qinghua',
     name: '青花缠枝碗',
     mid: 0.62,
@@ -29,6 +31,7 @@ export const WARES: Record<string, WareDef> = {
   },
   'qinghua-jar': {
     id: 'qinghua-jar',
+    culture: '盖罐多做储器，盖口要严；景德镇外销瓷里，罐是一大宗。',
     kind: 'qinghua',
     name: '青花盖罐',
     mid: 0.62,
@@ -41,6 +44,7 @@ export const WARES: Record<string, WareDef> = {
   },
   'qinghua-vase': {
     id: 'qinghua-vase',
+    culture: '梅瓶小口、丰肩、瘦底，宋代盛酒，后世转为陈设，是「器随世变」的例子。',
     kind: 'qinghua',
     name: '青花梅瓶',
     mid: 0.63,
@@ -53,6 +57,7 @@ export const WARES: Record<string, WareDef> = {
   },
   'jihong-vase': {
     id: 'jihong-vase',
+    culture: '霁红以铜为呈色剂，靠还原焰烧成，十窑九不成；玉壶春瓶撇口、细颈、垂腹。',
     kind: 'jihong',
     name: '霁红玉壶春',
     mid: 0.72,

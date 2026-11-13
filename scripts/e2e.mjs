@@ -101,6 +101,15 @@ try {
   await wait(400);
   await shot('01-title');
 
+  // The museum screen is reachable from the title and lists every ware.
+  await page.click('text=瓷谱');
+  await wait(400);
+  const pedestals = await page.locator('.pedestal').count();
+  check('AC-17 瓷谱 lists every ware on a pedestal', pedestals === 5, `found ${pedestals}`);
+  await shot('00-codex');
+  await page.click('.codex-close');
+  await wait(300);
+
   // Title → brief → load
   await page.click('.btn-primary');
   await wait(250);

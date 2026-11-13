@@ -143,6 +143,15 @@ export class Scene {
   private reduced = false;
   private acc = 0;
   private grainArt: HTMLCanvasElement | null = null;
+  private flyers: {
+    def: WareDef;
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+    t0: number;
+    dur: number;
+    verdict: string;
+  }[] = [];
+  private landed: { def: WareDef; x: number; y: number; verdict: string }[] = [];
   private grainPattern: CanvasPattern | null = null;
 
   constructor(reduced = false) {
@@ -155,6 +164,22 @@ export class Scene {
         p: Math.random() * Math.PI * 2,
       });
     }
+  }
+
+  /** A piece lifted out of the kiln and carried to the bench. */
+  launchFlyer(def: WareDef, from: { x: number; y: number }, to: { x: number; y: number }, verdict: string, now: number): void {
+    this.flyers.push({ def, from, to, t0: now, dur: 620, verdict });
+  }
+
+  /** Where the next piece should land: a row on the bench, left to right. */
+  benchSlot(l: Layout, i: number): { x: number; y: number } {
+    const x0 = 78;
+    return { x: x0 + i * (l.cell * 0.74), y: l.groundY - 4 };
+  }
+
+  clearBench(): void {
+    this.flyers = [];
+    this.landed = [];
   }
 
   draw(ctx: CanvasRenderingContext2D, game: Game, l: Layout, now: number, dt: number): void {
@@ -183,6 +208,7 @@ export class Scene {
     if (zoom) ctx.restore();
     this.updateParticles(l, heat, phase, dt);
     this.drawParticles(ctx);
+    this.bench(ctx, l, now);
     this.grain(ctx, l);
     if (l.chart && phase !== 'title') this.chart(ctx, l, game, now);
     this.vignette(ctx, l);
@@ -311,7 +337,7 @@ export class Scene {
 
   private woodpile(ctx: CanvasRenderingContext2D, l: Layout, game: Game): void {
     const s = game.state;
-    if (s.phase === 'title' || s.phase === 'brief') return;
+    if (s.phase === 'title' || s.phase === 'brief' || s.phase === 'open' || s.phase === 'settle') return;
     const left = Math.max(10, l.wallLeft - l.cell * 1.9);
     const baseY = l.groundY;
     const len = l.cell * 0.82;
@@ -1109,19 +1135,25 @@ export class Scene {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    const pts: [number, number][] = [];
-    for (let i = 0; i < s.samples.length; i++) {
-      const t = (i + 1) * QUARTER_SECONDS;
-      pts.push([x0 + ((x1 - x0) * t) / total, yOf(s.samples[i])]);
+    // The fire starts at zero, so the line starts at the left edge on the floor.
+    const pts: [number, number][] = [[x0, yOf(0)]];
+    if (s.trace.length > 0) {
+      for (const p of s.trace) {
+        pts.push([x0 + ((x1 - x0) * Math.min(p.t, total)) / total, yOf(p.v)]);
+      }
+    } else {
+      for (let i = 0; i < s.samples.length; i++) {
+        const t = (i + 1) * QUARTER_SECONDS;
+        pts.push([x0 + ((x1 - x0) * t) / total, yOf(s.samples[i])]);
+      }
     }
-    if (s.phase === 'fire' || s.phase === 'open' || s.phase === 'settle') {
-      const t = Math.min(s.fire.t, total);
-      pts.push([x0 + ((x1 - x0) * t) / total, yOf(s.phase === 'fire' ? s.fire.temp : s.peak)]);
+    if (s.phase === 'fire' && s.fire.t > 0) {
+      pts.push([x0 + ((x1 - x0) * Math.min(s.fire.t, total)) / total, yOf(s.fire.temp)]);
     }
 
     if (pts.length > 1) {
       ctx.beginPath();
-      ctx.moveTo(pts[0][0], yOf(targetAt(game.nightDef.curve, QUARTER_SECONDS)));
+      ctx.moveTo(pts[0][0], yOf(0));
       for (const p of pts) ctx.lineTo(p[0], p[1]);
       for (let i = pts.length - 1; i >= 0; i--) {
         const t = ((pts[i][0] - x0) / (x1 - x0)) * total;
@@ -1201,6 +1233,53 @@ export class Scene {
       ctx.fillText(t, x0 + ((x1 - x0) * i) / 4, y1 + (compact ? 10 : 13));
     });
     ctx.restore();
+  }
+
+  /** The bench the finished pieces land on, plus anything still in the air. */
+  private bench(ctx: CanvasRenderingContext2D, l: Layout, now: number): void {
+    const y = l.groundY;
+    const x0 = Math.max(70, l.wallLeft - l.cell * 2.9);
+    const w = l.cell * 4.2;
+
+    // Plank.
+    ctx.fillStyle = 'rgba(34,23,15,0.95)';
+    ctx.fillRect(x0 - 10, y - 6, w, 8);
+    ctx.fillStyle = 'rgba(96,70,44,0.35)';
+    ctx.fillRect(x0 - 10, y - 6, w, 1.6);
+    for (let i = 0; i < 2; i++) {
+      ctx.fillStyle = 'rgba(18,12,8,0.9)';
+      ctx.fillRect(x0 - 6 + i * w * 0.55, y + 2, 8, 10);
+    }
+
+    for (const p of this.landed) {
+      drawWare(ctx, p.def, p.x, p.y, fitWare(p.def.id, l.cell * 0.7, l.cell * 0.62), {
+        over: p.verdict === 'over',
+        cracked: p.verdict === 'cracked',
+        flambe: p.verdict === 'flambe',
+        dim: 0.92,
+      });
+    }
+
+    for (let i = this.flyers.length - 1; i >= 0; i--) {
+      const f = this.flyers[i];
+      const k = Math.min(1, (now - f.t0) / f.dur);
+      if (k >= 1) {
+        this.landed.push({ def: f.def, x: f.to.x, y: f.to.y, verdict: f.verdict });
+        this.flyers.splice(i, 1);
+        continue;
+      }
+      const e = 1 - Math.pow(1 - k, 3);
+      const x = f.from.x + (f.to.x - f.from.x) * e;
+      const yBase = f.from.y + (f.to.y - f.from.y) * e;
+      const arc = Math.sin(Math.PI * k) * l.cell * 0.55;
+      const y = yBase - arc;
+      drawWare(ctx, f.def, x, y, fitWare(f.def.id, l.cell * 0.7, l.cell * 0.62), {
+        over: f.verdict === 'over',
+        cracked: f.verdict === 'cracked',
+        flambe: f.verdict === 'flambe',
+        dim: 0.95,
+      });
+    }
   }
 
   /** A little film grain: the cheapest way to stop vector shapes looking like vector shapes. */

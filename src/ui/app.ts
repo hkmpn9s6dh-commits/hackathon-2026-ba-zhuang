@@ -1,12 +1,13 @@
 /** DOM shell: HUD, tray, buttons, cards. Canvas does the scenery only. */
 
 import { Game, type HintTarget, type Phase } from '../game';
-import { NIGHTS } from '../sim/data';
+import { NIGHTS, WARES } from '../sim/data';
 import { QUARTERS, QUARTER_SECONDS } from '../sim/fire';
 import { forecast, slotFactor, SLOTS, COL_NAMES } from '../sim/kiln';
 import { VERDICT_LABEL } from '../sim/score';
 import type { WareDef } from '../sim/types';
 import { computeLayout, paintWareThumb, Scene, slotRect, type Layout } from '../render/scene';
+import { drawWare as drawWarePublic, fitWare as fitWarePublic } from '../render/porcelain';
 import { drawShard } from '../render/porcelain';
 import { sfx, setFireLevel } from '../audio';
 
@@ -49,6 +50,7 @@ export class App {
   private hintEl: HTMLElement;
   private hintText = '';
   private pulseEl: HTMLElement | null = null;
+  private codexOpen = false;
 
   constructor() {
     this.canvas = document.getElementById('scene') as HTMLCanvasElement;
@@ -160,7 +162,7 @@ export class App {
   private frame(now: number): void {
     const dt = this.last === 0 ? 0.016 : Math.min(0.06, (now - this.last) / 1000);
     this.last = now;
-    this.game.update(dt);
+    if (!this.codexOpen) this.game.update(dt);
     this.scene.draw(this.ctx, this.game, this.layout, now, dt);
     this.syncHud();
     this.syncHint();
@@ -186,6 +188,7 @@ export class App {
       s.revealed,
       s.settlement ? 's' : '',
       this.game.filled(),
+      this.codexOpen ? 'codex' : '',
       this.layout.w,
       this.layout.h,
     ].join('|');
@@ -271,6 +274,12 @@ export class App {
     this.overlay.appendChild(this.hintEl);
     this.bar.replaceChildren();
     this.slots = [];
+    if (s.phase === 'title' || s.phase === 'brief') this.scene.clearBench();
+    document.getElementById('hud')?.style.setProperty('opacity', this.codexOpen ? '0' : '');
+    if (this.codexOpen) {
+      this.buildCodex();
+      return;
+    }
 
     switch (s.phase) {
       case 'title':
@@ -311,6 +320,13 @@ export class App {
     const start = EL('button', 'btn btn-primary', '点火');
     start.addEventListener('click', () => this.advance());
     acts.appendChild(start);
+    const codex = EL('button', 'btn', '瓷谱');
+    codex.addEventListener('click', () => {
+      this.codexOpen = true;
+      this.signature = '';
+      this.build();
+    });
+    acts.appendChild(codex);
     inner.appendChild(acts);
     const keys = EL('div', 'keys');
     keys.innerHTML =
@@ -555,7 +571,11 @@ export class App {
       el.style.height = `${r.h}px`;
       el.appendChild(EL('span', 'take-label', '取'));
       el.addEventListener('click', () => {
+        const from = { x: r.x + r.w / 2, y: r.y + r.h * 0.86 };
+        const to = this.scene.benchSlot(this.layout, this.game.state.revealed.length);
+        const verdict = piece.verdict;
         if (this.game.revealPiece(i)) {
+          this.scene.launchFlyer(piece.ware.def, from, to, verdict, performance.now());
           sfx('clink');
           this.signature = '';
           this.build();
@@ -643,6 +663,13 @@ export class App {
     this.overlay.appendChild(panel);
 
     const last = s.night >= NIGHTS.length - 1;
+    const codexBtn = EL('button', 'btn', '收进瓷谱');
+    codexBtn.addEventListener('click', () => {
+      this.codexOpen = true;
+      this.signature = '';
+      this.build();
+    });
+    this.bar.appendChild(codexBtn);
     const b = EL('button', 'btn btn-primary', last ? '看结局' : '下一夜');
     b.id = 'next';
     b.addEventListener('click', () => this.advance());
@@ -677,6 +704,62 @@ export class App {
     panel.appendChild(row);
     this.overlay.appendChild(panel);
     this.bar.appendChild(EL('div', 'bar-hint', '把桩师傅没有温度计，他有一片瓷。'));
+  }
+
+  /** 瓷谱: the wares as museum pieces, with what the real craft says about them. */
+  private buildCodex(): void {
+    const wrap = EL('div', 'codex');
+    const head = EL('div', 'codex-head');
+    head.appendChild(EL('div', 'kicker', '瓷谱'));
+    head.appendChild(EL('h2', '', '这一窑一窑，烧出来的器'));
+    head.appendChild(EL('p', '', '每一件都记着它是怎么来的：吃什么火、放在哪个窑位、出窑是什么成色。'));
+    wrap.appendChild(head);
+
+    const row = EL('div', 'codex-row');
+    for (const key of Object.keys(WARES)) {
+      const def = WARES[key];
+      const own = this.game.state.collected[key];
+      const fig = EL('figure', 'pedestal');
+      const stage = EL('div', 'pstage');
+      const cv = EL('canvas');
+      stage.appendChild(cv);
+      fig.appendChild(stage);
+      fig.appendChild(EL('div', 'plinth'));
+      const cap = EL('figcaption');
+      cap.appendChild(EL('b', 'pname', def.name));
+      const band = EL('span', 'pband');
+      band.textContent = `火候 ${def.mid.toFixed(2)} ± ${def.half.toFixed(2)}`;
+      cap.appendChild(band);
+      cap.appendChild(EL('p', 'pculture', def.culture));
+      const own2 = EL('span', own ? 'pown' : 'pown none');
+      own2.textContent = own ? `已得 ${own.count} 件 · 最好 ${VERDICT_LABEL[own.best as keyof typeof VERDICT_LABEL]}` : '还没烧出来过';
+      cap.appendChild(own2);
+      fig.appendChild(cap);
+      row.appendChild(fig);
+      requestAnimationFrame(() => {
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        cv.width = 132 * dpr;
+        cv.height = 132 * dpr;
+        cv.style.width = '132px';
+        cv.style.height = '132px';
+        const c = cv.getContext('2d');
+        if (c) {
+          c.setTransform(dpr, 0, 0, dpr, 0, 0);
+          c.clearRect(0, 0, 132, 132);
+          drawWarePublic(c, def, 66, 120, fitWarePublic(def.id, 112, 96));
+        }
+      });
+    }
+    wrap.appendChild(row);
+
+    const close = EL('button', 'btn btn-primary codex-close', '放回架上');
+    close.addEventListener('click', () => {
+      this.codexOpen = false;
+      this.signature = '';
+      this.build();
+    });
+    wrap.appendChild(close);
+    this.overlay.appendChild(wrap);
   }
 
   private buildEvent(): void {

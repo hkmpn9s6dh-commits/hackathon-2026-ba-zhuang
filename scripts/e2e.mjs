@@ -25,10 +25,10 @@ function findChrome() {
   throw new Error('no chromium found');
 }
 
-const base = process.env.BASE_URL ?? 'http://127.0.0.1:4174/';
+const base = process.env.BASE_URL ?? 'http://127.0.0.1:4318/';
 let server = null;
 if (!process.env.BASE_URL) {
-  server = spawn('npx', ['vite', 'preview', '--port', '4174', '--strictPort', '--host', '127.0.0.1'], {
+  server = spawn('npx', ['vite', 'preview', '--port', '4318', '--strictPort', '--host', '127.0.0.1'], {
     stdio: 'ignore',
     shell: process.platform === 'win32',
   });

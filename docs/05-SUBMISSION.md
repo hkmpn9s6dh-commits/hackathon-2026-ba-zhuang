@@ -66,7 +66,7 @@ npm run build     # 产出 dist/
 
 ## 8. 线上试玩
 
-`（部署后填）`
+https://hkmpn9s6dh-commits.github.io/hackathon-2026-ba-zhuang/ （gh-pages，部署中）
 
 ## 9. 仓库
 

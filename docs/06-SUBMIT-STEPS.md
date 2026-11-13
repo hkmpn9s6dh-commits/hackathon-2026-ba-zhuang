@@ -48,7 +48,7 @@
 
 ## 4. 线上试玩链接
 
-`（部署后填）`
+https://hkmpn9s6dh-commits.github.io/hackathon-2026-ba-zhuang/
 
 ## 5. 交完之后
 

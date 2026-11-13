@@ -60,13 +60,16 @@ if [ $FAST -eq 0 ]; then
 fi
 
 if [ $FAST -eq 0 ]; then
-  python -m http.server 4179 --bind 127.0.0.1 --directory dist >/dev/null 2>&1 &
+  python -m http.server 4317 --bind 127.0.0.1 --directory dist >/dev/null 2>&1 &
   SRV=$!
   for _ in $(seq 1 40); do
-    if curl -s -o /dev/null --noproxy '*' "http://127.0.0.1:4179/"; then break; fi
+    if curl -s --noproxy '*' "http://127.0.0.1:4317/" | grep -q "把桩"; then break; fi
     sleep 0.25
   done
-  if BASE_URL=http://127.0.0.1:4179/ node scripts/e2e.mjs >/tmp/bz-e2e.log 2>&1; then
+  if ! curl -s --noproxy '*' "http://127.0.0.1:4317/" | grep -q "把桩"; then
+    bad "static server serves this build (port 4317 busy?)"
+  fi
+  if BASE_URL=http://127.0.0.1:4317/ node scripts/e2e.mjs >/tmp/bz-e2e.log 2>&1; then
     ok "browser end-to-end (25 checks)"
   else
     bad "browser end-to-end"; tail -18 /tmp/bz-e2e.log

@@ -1,0 +1,20 @@
+{
+  "name": "ba-zhuang",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ba Zhuang (把桩) — one night at a Jingdezhen wood kiln, where a single shard of porcelain is your only thermometer.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

@@ -111,6 +111,7 @@ temp   += (burn * 0.34 - (0.30 * temp + 0.04)) * dt
 | AC-13 | 零控制台报错；`prefers-reduced-motion` 下粒子减半 | e2e 收 `console.error`；`matchMedia` 模拟 |
 | AC-14 | 全部资源可离线：构建产物无外部 URL | `verify.sh` 扫 `dist/` 里的 `http(s)://` |
 | AC-15 | 每一步都有一句提示，且随阶段换词（弱引导） | e2e 检查 `.hint.show` 在满窑与烧窑两个阶段都有内容且不同 |
+| AC-16 | 开窑时可以点窑里的器物把它取出来 | e2e 点第一个 `.take` 后 `state.revealed.length === 1` |
 
 ## 5. 不做
 

@@ -9,7 +9,9 @@ npm ci
 bash scripts/verify.sh
 ```
 
-在**全新 clone** 上跑，输出见 `proof/clone-check.md`。
+在**全新 clone** 上跑，输出见 `proof/clone-check.md`（2026-11-13 11:20，17 项全绿）。
+
+线上：https://hkmpn9s6dh-commits.github.io/hackathon-2026-ba-zhuang/ （2026-11-13 11:25 冒烟：标题 1.25 s 出现、12 窑位 / 5 件器、封窑进烧窑、零控制台报错）。
 
 ## 2. 验收条件逐条
 
